@@ -1,0 +1,64 @@
+<view class="page">
+  <view class="section">
+    <view class="section-title">语音导入日程</view>
+    <view class="card stack">
+      <input class="input" value="{{voiceText}}" placeholder="模拟语音文本：明天下午三点组会..." bindinput="onVoiceInput" />
+      <button class="primary-button" bindtap="parseVoice">识别并解析</button>
+    </view>
+  </view>
+
+  <view class="section" wx:if="{{parsedCard}}">
+    <view class="section-title">确认卡片</view>
+    <view class="card stack confirm-card">
+      <view class="row">
+        <text class="field">事项</text>
+        <text>{{parsedCard.title}}</text>
+      </view>
+      <view class="row">
+        <text class="field">时间</text>
+        <text>{{parsedCard.date}} {{parsedCard.startTime}}</text>
+      </view>
+      <view class="row">
+        <text class="field">提醒</text>
+        <text>{{parsedCard.remindAt}}</text>
+      </view>
+      <button class="primary-button" bindtap="confirmParsed">确认添加</button>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">
+      <text>课表</text>
+      <button class="mini-button" bindtap="addDemoCourse">导入示例</button>
+    </view>
+    <view class="stack">
+      <view class="card" wx:for="{{courses}}" wx:key="id">
+        <view class="row">
+          <view>
+            <view class="item-title">{{item.name}}</view>
+            <view class="muted">{{item.teacher}} · {{item.location}}</view>
+          </view>
+          <view class="pill">{{item.startTime}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">日程列表</view>
+    <view class="stack">
+      <view class="card" wx:for="{{schedules}}" wx:key="id">
+        <view class="row">
+          <view>
+            <view class="item-title">{{item.title}}</view>
+            <view class="muted">{{item.date}} {{item.startTime}} - {{item.endTime}}</view>
+          </view>
+          <view class="schedule-actions">
+            <view class="pill">{{item.type}}</view>
+            <button class="delete-button" data-id="{{item.id}}" bindtap="deleteSchedule">删</button>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

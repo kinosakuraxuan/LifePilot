@@ -1,0 +1,14 @@
+.label {
+  margin-bottom: 8rpx;
+  font-weight: 700;
+}
+
+.form-row {
+  padding-bottom: 8rpx;
+}
+
+.record-date {
+  margin-bottom: 8rpx;
+  font-weight: 700;
+}
+

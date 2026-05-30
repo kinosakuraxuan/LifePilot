@@ -1,0 +1,117 @@
+<view class="add-page">
+  <view class="add-top">
+    <button class="plain cancel" bindtap="navigateBack">取消</button>
+    <view class="add-title">新建日程</view>
+    <button class="plain add-action" bindtap="saveSchedule">添加</button>
+  </view>
+
+  <view class="form-card title-card">
+    <input class="field-input title-input" placeholder="标题" value="{{title}}" data-key="title" bindinput="updateField" />
+    <input class="field-input no-border" placeholder="位置或视频通话" value="{{location}}" data-key="location" bindinput="updateField" />
+  </view>
+
+  <view class="form-card">
+    <view class="form-row">
+      <text>全天</text>
+      <switch checked="{{allDay}}" color="#ef4444" bindchange="toggleAllDay" />
+    </view>
+    <view class="form-row">
+      <text>开始</text>
+      <view class="date-pair">
+        <picker mode="date" value="{{startDateKey}}" bindchange="onStartDateChange">
+          <text class="date-chip">{{startDate}}</text>
+        </picker>
+        <picker wx:if="{{!allDay}}" mode="time" value="{{startTime}}" bindchange="onStartTimeChange">
+          <text class="date-chip time-chip">{{startTime}}</text>
+        </picker>
+      </view>
+    </view>
+    <view class="form-row no-border">
+      <text>结束</text>
+      <view class="date-pair">
+        <picker mode="date" value="{{endDateKey}}" disabled="{{allDay}}" bindchange="onEndDateChange">
+          <text class="date-chip {{allDay ? 'locked' : ''}}">{{endDate}}</text>
+        </picker>
+        <picker wx:if="{{!allDay}}" mode="time" value="{{endTime}}" bindchange="onEndTimeChange">
+          <text class="date-chip time-chip">{{endTime}}</text>
+        </picker>
+      </view>
+    </view>
+  </view>
+
+  <view class="form-card">
+    <button class="form-row as-button {{repeatValue === 'never' ? 'no-border' : ''}}" bindtap="openRepeatSheet">
+      <text>重复</text>
+      <text class="select-value">{{repeatLabel}}⌄</text>
+    </button>
+    <view wx:if="{{repeatValue !== 'never'}}" class="form-row">
+      <text>结束重复</text>
+      <text class="select-value">{{repeatEndMode}}⌄</text>
+    </view>
+    <view wx:if="{{repeatValue !== 'never'}}" class="form-row no-border">
+      <text>结束日期</text>
+      <picker mode="date" value="{{repeatEndDateKey}}" bindchange="onRepeatEndDateChange">
+        <text class="date-chip">{{repeatEndDate}}</text>
+      </picker>
+    </view>
+  </view>
+
+  <picker mode="selector" range="{{reminderOptions}}" bindchange="onReminderChange">
+    <view class="form-card single-row">
+      <text>提醒</text>
+      <text class="select-value">{{reminder}}⌄</text>
+    </view>
+  </picker>
+
+  <view class="form-card title-card">
+    <input class="field-input" placeholder="URL" value="{{url}}" data-key="url" bindinput="updateField" />
+    <textarea class="note-input" placeholder="备注" value="{{note}}" data-key="note" bindinput="updateField"></textarea>
+  </view>
+
+  <view class="bottom-input">
+    <textarea class="long-input" placeholder="长文本输入：可以粘贴会议说明、待办细节或课堂要求" value="{{longText}}" data-key="longText" bindinput="updateField"></textarea>
+    <button class="voice-button" bindtap="startVoice" aria-label="语音输入">
+      <view class="mic-stem"></view>
+      <view class="mic-base"></view>
+    </button>
+  </view>
+
+  <view wx:if="{{showRepeatSheet}}" class="modal-mask" bindtap="closeRepeatSheet">
+    <view class="repeat-sheet" catchtap="noop">
+      <button wx:for="{{repeatOptions}}" wx:key="value" class="repeat-option" data-value="{{item.value}}" bindtap="selectRepeat">
+        <text class="check">{{repeatValue === item.value ? '✓' : ''}}</text>
+        <text>{{item.label}}</text>
+      </button>
+    </view>
+  </view>
+
+  <view wx:if="{{showCustomRepeat}}" class="modal-mask">
+    <view class="custom-panel">
+      <view class="custom-top">
+        <button class="plain back-action" bindtap="backToRepeatSheet">‹ 新建日程</button>
+        <text class="custom-title">自定义</text>
+        <button class="plain done-action" bindtap="confirmCustomRepeat">完成</button>
+      </view>
+
+      <view class="custom-card">
+        <view class="custom-row">
+          <text>频率</text>
+          <text class="select-value">{{customUnitLabel}}⌄</text>
+        </view>
+        <view class="custom-row no-border">
+          <text>每</text>
+          <text class="custom-summary">{{customNumber}} {{customUnitLabel}}</text>
+        </view>
+        <picker-view class="repeat-picker" indicator-class="picker-indicator" value="{{customPickerValue}}" bindchange="onCustomPickerChange">
+          <picker-view-column>
+            <view wx:for="{{customNumbers}}" wx:key="*this" class="picker-item">{{item}}</view>
+          </picker-view-column>
+          <picker-view-column>
+            <view wx:for="{{customUnits}}" wx:key="value" class="picker-item">{{item.label}}</view>
+          </picker-view-column>
+        </picker-view>
+      </view>
+      <view class="custom-tip">日程将每{{customNumber}}{{customUnitLabel}}重复。</view>
+    </view>
+  </view>
+</view>

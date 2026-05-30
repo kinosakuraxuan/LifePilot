@@ -1,0 +1,41 @@
+<view class="page">
+  <view class="section">
+    <view class="section-title">快速记录</view>
+    <view class="card stack">
+      <view class="form-row">
+        <view class="label">学习 {{form.studyMinutes}} 分钟</view>
+        <slider min="0" max="600" step="10" value="{{form.studyMinutes}}" data-key="studyMinutes" bindchange="updateNumber" activeColor="#2563eb" />
+      </view>
+      <view class="form-row">
+        <view class="label">娱乐 {{form.entertainmentMinutes}} 分钟</view>
+        <slider min="0" max="360" step="10" value="{{form.entertainmentMinutes}}" data-key="entertainmentMinutes" bindchange="updateNumber" activeColor="#f59e0b" />
+      </view>
+      <view class="form-row">
+        <view class="label">运动 {{form.exerciseMinutes}} 分钟</view>
+        <slider min="0" max="180" step="5" value="{{form.exerciseMinutes}}" data-key="exerciseMinutes" bindchange="updateNumber" activeColor="#16a34a" />
+      </view>
+      <view class="form-row">
+        <view class="label">睡眠 {{form.sleepHours}} 小时</view>
+        <slider min="0" max="12" step="0.5" value="{{form.sleepHours}}" data-key="sleepHours" bindchange="updateNumber" activeColor="#7c3aed" />
+      </view>
+      <input class="input" value="{{form.mood}}" placeholder="今天的状态，例如：平稳、疲惫、开心" bindinput="updateMood" />
+      <button class="primary-button" bindtap="saveRecord">保存今日记录</button>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">最近记录</view>
+    <view class="stack">
+      <view class="card" wx:for="{{recent}}" wx:key="id">
+        <view class="row">
+          <view>
+            <view class="record-date">{{item.date}}</view>
+            <view class="muted">学习 {{item.studyMinutes}}m · 运动 {{item.exerciseMinutes}}m · 睡眠 {{item.sleepHours}}h</view>
+          </view>
+          <view class="pill">{{item.mood || "已记录"}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
+

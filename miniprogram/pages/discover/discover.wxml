@@ -1,0 +1,29 @@
+<view class="page discover-page">
+  <view class="discover-hero">
+    <view>
+      <view class="muted">发现</view>
+      <view class="hero-title">生活状态地图</view>
+      <view class="hero-subtitle">娱乐、睡眠、运动、音乐围绕周报展开</view>
+    </view>
+  </view>
+
+  <view class="quadrant-board">
+    <view class="quadrant {{item.cls}}" wx:for="{{quadrants}}" wx:key="title" data-path="{{item.path}}" bindtap="goModule">
+      <view class="quadrant-title">{{item.title}}</view>
+      <view class="quadrant-value">{{item.value}}</view>
+      <view class="quadrant-desc">{{item.desc}}</view>
+    </view>
+    <button class="report-center" bindtap="goReport">
+      <view class="report-main">周报</view>
+      <view class="report-sub">进入</view>
+    </button>
+  </view>
+
+  <view class="section">
+    <view class="section-title">AI 综合提醒</view>
+    <view class="card advice">
+      本周学习状态稳定，但晚间娱乐时间偏晚，可能影响睡眠质量。建议把娱乐结束时间提前到 22:30，并在周末补一次 30 分钟运动。
+    </view>
+  </view>
+</view>
+

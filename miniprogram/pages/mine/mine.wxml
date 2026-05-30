@@ -1,0 +1,72 @@
+<view class="page">
+  <view class="section">
+    <view class="profile-card">
+      <view class="avatar">{{user.nickname}}</view>
+      <view class="profile-main">
+        <view class="profile-name">{{user.nickname}}</view>
+        <view class="muted">{{user.school}} · {{user.major}} · {{user.grade}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">个人目标</view>
+    <view class="card stack">
+      <view class="row" wx:for="{{profileItems}}" wx:key="label">
+        <text class="muted">{{item.label}}</text>
+        <text>{{item.value}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">功能管理</view>
+    <view class="card stack">
+      <view class="row link-row" data-path="/pages/schedule/schedule" bindtap="goPage">
+        <text>课表与日程导入</text>
+        <text class="muted">进入</text>
+      </view>
+      <view class="row link-row" data-path="/pages/report/report" bindtap="goPage">
+        <text>周报历史与生成</text>
+        <text class="muted">进入</text>
+      </view>
+      <view class="row link-row" data-path="/pages/record/record" bindtap="goPage">
+        <text>生活记录</text>
+        <text class="muted">进入</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">隐私与 AI 权限</view>
+    <view class="card">
+      <view class="row">
+        <view>
+          <view class="auth-title">允许 AI 读取本周日记生成周报</view>
+          <view class="muted">默认关闭，可随时取消授权</view>
+        </view>
+        <switch checked="{{aiDiaryAllowed}}" bindchange="toggleDiaryAuth" />
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">
+      <text>日记与灵感</text>
+      <button class="mini-button" bindtap="addDiary">新增</button>
+    </view>
+    <view class="stack">
+      <view class="card" wx:for="{{diaries}}" wx:key="id">
+        <view class="row diary-head">
+          <view class="pill">{{item.type}}</view>
+          <view class="muted">{{item.date}} · {{item.mood}}</view>
+        </view>
+        <view class="diary-content">{{item.content}}</view>
+        <view class="tag-row">
+          <text class="success-pill" wx:for="{{item.tags}}" wx:key="*this">{{item}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
+

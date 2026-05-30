@@ -1,0 +1,75 @@
+<view class="calendar-ipad">
+  <view class="month-line">
+    <text data-delta="-1" bindtap="changeMonth">‹</text>
+    <text class="month-title">{{monthTitle}}</text>
+    <text data-delta="1" bindtap="changeMonth">›</text>
+  </view>
+
+  <view class="wide-weekdays">
+    <view wx:for="{{weekdays}}" wx:key="*this">{{item}}</view>
+  </view>
+
+  <view class="wide-month">
+    <view class="wide-day {{item.disabled ? 'wide-empty' : ''}} {{item.isToday ? 'wide-today' : ''}}" wx:for="{{days}}" wx:key="id" data-day="{{item.day}}" bindtap="openDay">
+      <view class="wide-date">
+        <text class="wide-lunar">{{item.lunar}}</text>
+        <text class="wide-number" wx:if="{{!item.disabled}}">{{item.day}}</text>
+      </view>
+      <view class="wide-events">
+        <view class="wide-event {{event.color}}" wx:for="{{item.events}}" wx:for-item="event" wx:key="id">
+          <text class="event-title">{{event.title}}</text>
+          <text class="event-time">{{event.start}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="popup-mask" wx:if="{{showPopup}}" bindtap="closePopup">
+    <view class="date-popup {{popupLevel}}" catchtap="noop">
+      <view class="popup-handle" bindtouchstart="onHandleStart" bindtouchend="onHandleEnd"></view>
+      <view class="popup-title">{{month}}月{{popupDay}}日 · {{popupLunar}}</view>
+      <swiper class="popup-swiper" indicator-dots="true" indicator-color="#d1d5db" indicator-active-color="#ef4444">
+        <swiper-item>
+          <scroll-view class="popup-scroll" scroll-y="true">
+            <view class="panel-title">详细日程</view>
+            <block wx:if="{{popupEvents.length}}">
+              <view class="swipe-row" wx:for="{{popupEvents}}" wx:key="id" data-id="{{item.id}}" bindtouchstart="onAgendaTouchStart" bindtouchend="onAgendaTouchEnd">
+                <view class="swipe-action">
+                  <button class="swipe-delete" data-id="{{item.id}}" catchtap="deleteSchedule">删除</button>
+                </view>
+                <view class="agenda-item swipe-content {{swipedId === item.id ? 'is-open' : ''}}">
+                  <view class="accent"></view>
+                  <view class="agenda-main">
+                    <view class="agenda-title">{{item.title}}</view>
+                    <view class="agenda-location">{{item.location || '日程安排'}}</view>
+                  </view>
+                  <view class="agenda-time">
+                    <view>{{item.start}}</view>
+                    <view>{{item.end}}</view>
+                  </view>
+                </view>
+              </view>
+            </block>
+            <view class="empty-panel" wx:else>无日程</view>
+          </scroll-view>
+        </swiper-item>
+        <swiper-item>
+          <scroll-view class="popup-scroll" scroll-y="true">
+            <view class="panel-title">添加日记</view>
+            <textarea class="diary-input" placeholder="记录这一天发生的事、情绪或复盘..." value="{{diaryText}}" bindinput="updateDiary"></textarea>
+            <button class="save-diary" bindtap="saveDiary">保存日记</button>
+          </scroll-view>
+        </swiper-item>
+        <swiper-item>
+          <scroll-view class="popup-scroll" scroll-y="true">
+            <view class="panel-title">灵感记录</view>
+            <block wx:if="{{inspirations.length}}">
+              <view class="idea-card" wx:for="{{inspirations}}" wx:key="*this">{{item}}</view>
+            </block>
+            <view class="empty-panel" wx:else>暂无灵感</view>
+          </scroll-view>
+        </swiper-item>
+      </swiper>
+    </view>
+  </view>
+</view>

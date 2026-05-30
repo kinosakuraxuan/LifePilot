@@ -1,0 +1,146 @@
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+}
+
+.report-card {
+  padding: 28rpx;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 18rpx;
+  background: #ffffff;
+}
+
+.report-value {
+  margin-bottom: 8rpx;
+  font-size: 40rpx;
+  font-weight: 800;
+}
+
+.chart-card {
+  gap: 20rpx;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+
+.bar-label {
+  width: 88rpx;
+  color: #475569;
+}
+
+.bar-track {
+  flex: 1;
+  height: 24rpx;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: #e2e8f0;
+}
+
+.bar-fill {
+  height: 24rpx;
+  border-radius: 999rpx;
+  background: #ef4444;
+}
+
+.bar-fill.orange {
+  background: #f97316;
+}
+
+.bar-fill.green {
+  background: #16a34a;
+}
+
+.sleep-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  height: 260rpx;
+  padding-top: 26rpx;
+}
+
+.sleep-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  width: 74rpx;
+  height: 220rpx;
+}
+
+.sleep-bar {
+  width: 34rpx;
+  min-height: 24rpx;
+  border-radius: 999rpx 999rpx 8rpx 8rpx;
+  background: linear-gradient(180deg, #7c3aed, #c4b5fd);
+}
+
+.sleep-label {
+  margin-top: 12rpx;
+  color: #64748b;
+  font-size: 22rpx;
+}
+
+.dist-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10rpx;
+  font-weight: 700;
+}
+
+.radar-card {
+  position: relative;
+  height: 460rpx;
+  overflow: hidden;
+}
+
+.radar-bg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 260rpx;
+  height: 260rpx;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border: 2rpx solid #cbd5e1;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.radar-point {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+}
+
+.r1 { transform: translate(-50%, -190rpx); }
+.r2 { transform: translate(120rpx, -60rpx); }
+.r3 { transform: translate(70rpx, 142rpx); }
+.r4 { transform: translate(-190rpx, 142rpx); }
+.r5 { transform: translate(-240rpx, -60rpx); }
+
+.radar-dot {
+  width: 18rpx;
+  height: 18rpx;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 10rpx rgba(239, 68, 68, 0.12);
+}
+
+.radar-label {
+  margin-top: 12rpx;
+  color: #334155;
+  font-size: 24rpx;
+  white-space: nowrap;
+}
+
+.advice {
+  color: #334155;
+  line-height: 1.7;
+}
+
+.auth-title {
+  margin-bottom: 8rpx;
+  font-weight: 700;
+}

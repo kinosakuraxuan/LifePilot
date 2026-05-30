@@ -1,0 +1,66 @@
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+  padding: 30rpx;
+  border-radius: 20rpx;
+  background: #ffffff;
+  border: 1rpx solid #e2e8f0;
+}
+
+.avatar {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 96rpx;
+  text-align: center;
+}
+
+.profile-main {
+  flex: 1;
+}
+
+.profile-name {
+  margin-bottom: 8rpx;
+  font-size: 36rpx;
+  font-weight: 800;
+}
+
+.link-row {
+  min-height: 64rpx;
+}
+
+.auth-title {
+  margin-bottom: 8rpx;
+  font-weight: 700;
+}
+
+.mini-button {
+  min-width: 120rpx;
+  height: 58rpx;
+  border-radius: 12rpx;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 24rpx;
+  line-height: 58rpx;
+}
+
+.diary-head {
+  margin-bottom: 16rpx;
+}
+
+.diary-content {
+  margin-bottom: 16rpx;
+  color: #334155;
+  line-height: 1.7;
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
