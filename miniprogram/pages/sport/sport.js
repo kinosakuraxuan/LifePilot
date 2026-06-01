@@ -1,19 +1,47 @@
-const mock = require("../../data/mock");
+const { KEYS, readList } = require("../../utils/storage");
+
+function buildSport() {
+  const app = getApp();
+  const user = app.globalData.user || {};
+  const sportGoal = Number(user.sportGoal || 3);
+  const records = readList(KEYS.records, []).slice(0, 7);
+  const today = records[0] || {};
+  const weeklyTimes = records.filter((item) => Number(item.exerciseMinutes || 0) > 0).length;
+  const total = records.reduce((sum, item) => sum + Number(item.exerciseMinutes || 0), 0);
+  const types = [...new Set(records.filter((item) => Number(item.exerciseMinutes || 0) > 0).map((item) => item.exerciseType).filter(Boolean))];
+  return {
+    todayMinutes: Number(today.exerciseMinutes || 0),
+    weeklyTimes,
+    goalTimes: sportGoal,
+    calories: Math.round(total * 7.5),
+    types: types.length ? types : [],
+    advice: weeklyTimes < sportGoal
+      ? `本周已运动 ${weeklyTimes} 次，距离目标还差 ${sportGoal - weeklyTimes} 次。`
+      : "本周运动目标已达成，注意拉伸和恢复。"
+  };
+}
+
+function buildTrend() {
+  return readList(KEYS.records, []).slice(0, 7).reverse().map((item) => ({
+    label: item.date,
+    value: Math.min(100, Math.round((Number(item.exerciseMinutes || 0) / 60) * 100))
+  }));
+}
 
 Page({
   data: {
-    sport: mock.dashboard.sport,
-    trend: [
-      { label: "周一", value: 25 },
-      { label: "周二", value: 0 },
-      { label: "周三", value: 35 },
-      { label: "周四", value: 15 },
-      { label: "周五", value: 20 }
-    ]
+    sport: buildSport(),
+    trend: buildTrend()
+  },
+
+  onShow() {
+    this.setData({
+      sport: buildSport(),
+      trend: buildTrend()
+    });
   },
 
   addSport() {
-    wx.showToast({ title: "已记录运动", icon: "success" });
+    wx.navigateTo({ url: "/pages/record/record" });
   }
 });
-

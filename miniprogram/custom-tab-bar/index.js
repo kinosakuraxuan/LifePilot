@@ -27,10 +27,10 @@ Component({
 
   methods: {
     switchTab(e) {
-      const index = Number(e.currentTarget.dataset.index);
-      const item = this.data.list[index];
-      wx.switchTab({ url: item.pagePath });
+      const path = e.currentTarget.dataset.path;
+      if (path) {
+        wx.switchTab({ url: path });
+      }
     }
   }
 });
-

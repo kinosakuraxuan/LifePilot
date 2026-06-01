@@ -1,9 +1,11 @@
 {
   "pages": [
+    "pages/login/login",
     "pages/home/home",
     "pages/calendar/calendar",
     "pages/discover/discover",
     "pages/mine/mine",
+    "pages/noteList/noteList",
     "pages/search/search",
     "pages/scheduleAdd/scheduleAdd",
     "pages/schedule/schedule",
@@ -11,7 +13,10 @@
     "pages/report/report",
     "pages/sport/sport",
     "pages/entertainment/entertainment",
-    "pages/sleep/sleep"
+    "pages/sleep/sleep",
+    "pages/pomodoroSelect/pomodoroSelect",
+    "pages/pomodoroTimer/pomodoroTimer",
+    "pages/boundlessNote/boundlessNote"
   ],
   "window": {
     "navigationBarTitleText": "CampusMind",
@@ -53,6 +58,8 @@
     ]
   },
   "sitemapLocation": "sitemap.json",
-  "style": "v2"
+  "style": "v2",
+  
+  "componentFramework": "glass-easel",
+  "lazyCodeLoading": "requiredComponents"
 }
-

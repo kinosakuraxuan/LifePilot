@@ -3,11 +3,11 @@
     <view class="section-title">睡眠看板</view>
     <view class="panel-grid">
       <view class="panel-card">
-        <view class="big-number">{{sleep.lastNightHours}}h</view>
+        <view class="big-number">{{sleep.lastNightHours}}小时</view>
         <view class="muted">昨晚睡眠</view>
       </view>
       <view class="panel-card">
-        <view class="big-number">{{sleep.averageHours}}h</view>
+        <view class="big-number">{{sleep.averageHours}}小时</view>
         <view class="muted">周平均</view>
       </view>
       <view class="panel-card">
@@ -43,4 +43,3 @@
 
   <button class="primary-button" bindtap="addSleep">记录昨晚睡眠</button>
 </view>
-

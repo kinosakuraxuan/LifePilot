@@ -1,27 +1,26 @@
 const { KEYS, appendItem, readList } = require("../../utils/storage");
 const { formatDate } = require("../../utils/date");
-const mock = require("../../data/mock");
+const { api } = require("../../utils/cloud");
 
 Page({
   data: {
     form: {
-      studyMinutes: 120,
-      entertainmentMinutes: 60,
-      exerciseMinutes: 30,
-      sleepHours: 7,
-      mood: "平稳"
+      studyMinutes: 0,
+      entertainmentMinutes: 0,
+      exerciseMinutes: 0,
+      sleepHours: 0,
+      mood: ""
     },
     recent: []
   },
 
   onShow() {
-    this.setData({ recent: readList(KEYS.records, mock.records).slice(0, 5) });
+    this.setData({ recent: readList(KEYS.records, []).slice(0, 5) });
   },
 
   updateNumber(e) {
     const key = e.currentTarget.dataset.key;
-    const value = Number(e.detail.value);
-    this.setData({ [`form.${key}`]: value });
+    this.setData({ [`form.${key}`]: Number(e.detail.value) });
   },
 
   updateMood(e) {
@@ -29,12 +28,12 @@ Page({
   },
 
   saveRecord() {
-    const recent = appendItem(KEYS.records, {
-      date: formatDate(new Date()),
-      ...this.data.form
-    });
+    const record = Object.assign({ date: formatDate(new Date()) }, this.data.form);
+    const recent = appendItem(KEYS.records, record);
     this.setData({ recent: recent.slice(0, 5) });
-    wx.showToast({ title: "记录成功", icon: "success" });
+    api.record.create(record).catch((error) => {
+      console.warn("record create pending local only", error.message);
+    });
+    wx.showToast({ title: "记录已保存", icon: "success" });
   }
 });
-

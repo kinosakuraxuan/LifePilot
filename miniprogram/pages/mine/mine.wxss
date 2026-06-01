@@ -3,12 +3,13 @@
   align-items: center;
   gap: 22rpx;
   padding: 30rpx;
+  border: 1rpx solid #e2e8f0;
   border-radius: 20rpx;
   background: #ffffff;
-  border: 1rpx solid #e2e8f0;
 }
 
 .avatar {
+  flex: 0 0 auto;
   width: 96rpx;
   height: 96rpx;
   border-radius: 50%;
@@ -22,6 +23,14 @@
 
 .profile-main {
   flex: 1;
+  min-width: 0;
+}
+
+.profile-name,
+.auth-title,
+.note-entry-title,
+.note-entry-desc {
+  display: block;
 }
 
 .profile-name {
@@ -49,18 +58,130 @@
   line-height: 58rpx;
 }
 
-.diary-head {
-  margin-bottom: 16rpx;
+.form-hint {
+  padding: 16rpx 20rpx;
+  border-left: 4rpx solid #3b82f6;
+  border-radius: 12rpx;
+  background: #f0f9ff;
+  color: #64748b;
+  font-size: 24rpx;
+  line-height: 1.6;
 }
 
-.diary-content {
-  margin-bottom: 16rpx;
+.form-item {
+  margin-bottom: 20rpx;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 10rpx;
   color: #334155;
-  line-height: 1.7;
+  font-size: 26rpx;
+  font-weight: 600;
 }
 
-.tag-row {
+.form-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 76rpx;
+  padding: 0 24rpx;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 12rpx;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 28rpx;
+}
+
+.form-divider {
+  height: 1rpx;
+  margin: 24rpx 0;
+  background: #e2e8f0;
+}
+
+.save-btn {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10rpx;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 88rpx;
+  margin-top: 20rpx;
+  border-radius: 16rpx;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 30rpx;
+  font-weight: 700;
+  line-height: 88rpx;
+}
+
+.save-btn[disabled] {
+  background: #fca5a5;
+}
+
+.note-entry {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  min-height: 150rpx;
+  padding: 30rpx;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 22rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 28rpx rgba(15, 23, 42, 0.05);
+}
+
+.note-entry-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.note-entry-title {
+  margin-bottom: 14rpx;
+  color: #111827;
+  font-size: 36rpx;
+  font-weight: 800;
+}
+
+.note-entry-desc {
+  color: #64748b;
+  font-size: 28rpx;
+  line-height: 1.4;
+}
+
+.note-entry-side {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.note-count {
+  min-width: 52rpx;
+  height: 52rpx;
+  border-radius: 50%;
+  background: #fee2e2;
+  color: #ef4444;
+  font-size: 26rpx;
+  font-weight: 800;
+  line-height: 52rpx;
+  text-align: center;
+}
+
+.note-arrow {
+  color: #94a3b8;
+  font-size: 52rpx;
+  line-height: 1;
+}
+
+.logout-btn {
+  min-width: 120rpx;
+  height: 58rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid #fecaca;
+  border-radius: 12rpx;
+  background: #fef2f2;
+  color: #ef4444;
+  font-size: 24rpx;
+  line-height: 58rpx;
 }

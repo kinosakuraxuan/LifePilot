@@ -20,7 +20,8 @@ button::after {
 }
 
 .page {
-  padding: 32rpx 28rpx 48rpx;
+  box-sizing: border-box;
+  padding: calc(32rpx + env(safe-area-inset-top)) 28rpx calc(180rpx + env(safe-area-inset-bottom));
 }
 
 .section {
@@ -101,12 +102,14 @@ button::after {
 }
 
 .panel-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 16rpx;
 }
 
 .panel-card {
+  box-sizing: border-box;
+  width: calc((100% - 16rpx) / 2);
   padding: 26rpx;
   border: 1rpx solid #e2e8f0;
   border-radius: 16rpx;

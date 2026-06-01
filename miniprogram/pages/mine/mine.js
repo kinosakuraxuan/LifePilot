@@ -1,54 +1,184 @@
-const mock = require("../../data/mock");
+const { KEYS, listBoundlessNotes } = require("../../utils/storage");
+const { api } = require("../../utils/cloud");
+
+const LOGIN_STATUS_KEY = "lifepilot_login_status";
+
+function hasValue(value) {
+  return value !== null && value !== undefined && value !== "";
+}
 
 Page({
   data: {
     user: {},
-    diaries: mock.diaries,
+    noteCount: 0,
+    latestPreview: "暂无无边记",
     aiDiaryAllowed: false,
-    profileItems: []
+    profileItems: [],
+    isLoggedIn: false,
+    editMode: false,
+    saving: false,
+    formSchool: "",
+    formMajor: "",
+    formGrade: "",
+    formStudyGoal: "",
+    formSportGoal: "",
+    formSleepGoal: "",
+    formEntertainmentLimit: ""
+  },
+
+  onLoad() {
+    this.refreshUser();
   },
 
   onShow() {
     if (typeof this.getTabBar === "function" && this.getTabBar()) {
       this.getTabBar().setData({ selected: 3 });
     }
+    this.refreshUser();
   },
 
-  onLoad() {
-    const user = getApp().globalData.user;
+  refreshUser() {
+    const app = getApp();
+    const user = app.globalData.user || {};
+    const loginStatus = wx.getStorageSync(LOGIN_STATUS_KEY);
+    const isLoggedIn = !!(app.globalData.isLoggedIn || (loginStatus && loginStatus.openid));
+    const profileCompleted = user.profileCompleted === true || (loginStatus && loginStatus.profileCompleted === true);
+    const settings = wx.getStorageSync(KEYS.userSettings) || {};
+    const notes = listBoundlessNotes();
+    const latest = notes[0] || {};
+    const items = [];
+
+    if (user.school) items.push({ label: "学校", value: user.school });
+    if (user.major) items.push({ label: "专业", value: user.major });
+    if (user.grade) items.push({ label: "年级", value: user.grade });
+    if (hasValue(user.studyGoal)) items.push({ label: "学习目标", value: `${user.studyGoal} 小时/周` });
+    if (hasValue(user.sportGoal)) items.push({ label: "运动目标", value: `${user.sportGoal} 次/周` });
+    if (user.sleepGoal) items.push({ label: "睡眠目标", value: user.sleepGoal });
+    if (hasValue(user.entertainmentLimit)) items.push({ label: "娱乐上限", value: `${user.entertainmentLimit} 分钟/天` });
+
     this.setData({
       user,
-      profileItems: [
-        { label: "\u5b66\u6821", value: user.school },
-        { label: "\u4e13\u4e1a", value: user.major },
-        { label: "\u5e74\u7ea7", value: user.grade },
-        { label: "\u5b66\u4e60\u76ee\u6807", value: `\u6bcf\u5468 ${user.studyGoal} \u5c0f\u65f6` },
-        { label: "\u8fd0\u52a8\u76ee\u6807", value: `\u6bcf\u5468 ${user.sportGoal} \u6b21` },
-        { label: "\u7761\u7720\u76ee\u6807", value: user.sleepGoal },
-        { label: "\u5a31\u4e50\u4e0a\u9650", value: `\u6bcf\u5929 ${user.entertainmentLimit} \u5206\u949f` }
-      ]
+      isLoggedIn,
+      editMode: !profileCompleted,
+      aiDiaryAllowed: !!settings.allowDiaryAI,
+      profileItems: items,
+      noteCount: notes.length,
+      latestPreview: latest.content ? latest.content.slice(0, 32) : "暂无无边记",
+      formSchool: user.school || "",
+      formMajor: user.major || "",
+      formGrade: user.grade || "",
+      formStudyGoal: hasValue(user.studyGoal) ? String(user.studyGoal) : "",
+      formSportGoal: hasValue(user.sportGoal) ? String(user.sportGoal) : "",
+      formSleepGoal: user.sleepGoal || "",
+      formEntertainmentLimit: hasValue(user.entertainmentLimit) ? String(user.entertainmentLimit) : ""
     });
   },
 
-  toggleDiaryAuth(e) {
-    this.setData({ aiDiaryAllowed: e.detail.value });
+  refreshNotes() {
+    this.refreshUser();
   },
 
-  addDiary() {
-    const diaries = [{
-      id: `${Date.now()}`,
-      type: "\u7075\u611f",
-      mood: "\u5174\u594b",
-      content: "\u65b0\u589e\u4e00\u6761\u7075\u611f\uff1a\u628a\u8bfe\u5802 HCI \u539f\u5219\u5bf9\u5e94\u5230\u6bcf\u4e2a\u9875\u9762\u7684\u4ea4\u4e92\u8bf4\u660e\u3002",
-      tags: ["HCI", "\u7b54\u8fa9"],
-      date: "\u521a\u521a"
-    }, ...this.data.diaries];
-    this.setData({ diaries });
-    wx.showToast({ title: "\u5df2\u6dfb\u52a0\u7075\u611f", icon: "success" });
+  onSchoolInput(e) { this.setData({ formSchool: e.detail.value }); },
+  onMajorInput(e) { this.setData({ formMajor: e.detail.value }); },
+  onGradeInput(e) { this.setData({ formGrade: e.detail.value }); },
+  onStudyGoalInput(e) { this.setData({ formStudyGoal: e.detail.value }); },
+  onSportGoalInput(e) { this.setData({ formSportGoal: e.detail.value }); },
+  onSleepGoalInput(e) { this.setData({ formSleepGoal: e.detail.value }); },
+  onEntertainmentLimitInput(e) { this.setData({ formEntertainmentLimit: e.detail.value }); },
+
+  enableEdit() {
+    this.setData({ editMode: true });
+  },
+
+  async handleSaveProfile() {
+    if (this.data.saving) return;
+    this.setData({ saving: true });
+
+    try {
+      const result = await api.user.updateProfile({
+        school: this.data.formSchool.trim(),
+        major: this.data.formMajor.trim(),
+        grade: this.data.formGrade.trim(),
+        studyGoal: this.data.formStudyGoal.trim(),
+        sportGoal: this.data.formSportGoal.trim(),
+        sleepGoal: this.data.formSleepGoal.trim(),
+        entertainmentLimit: this.data.formEntertainmentLimit.trim(),
+        profileCompleted: true
+      });
+
+      if (result.code !== 0 || !result.data || !result.data.user) {
+        throw new Error(result.message || "保存失败");
+      }
+
+      const app = getApp();
+      app.syncUserData(result.data.user, false);
+      app.globalData.isNewUser = false;
+
+      const loginStatus = wx.getStorageSync(LOGIN_STATUS_KEY) || {};
+      loginStatus.isNewUser = false;
+      loginStatus.profileCompleted = true;
+      wx.setStorageSync(LOGIN_STATUS_KEY, loginStatus);
+
+      wx.showToast({ title: "已保存", icon: "success", duration: 1200 });
+      setTimeout(() => this.refreshUser(), 250);
+    } catch (error) {
+      console.error("saveProfile failed", error);
+      wx.showToast({ title: "保存失败，请稍后重试", icon: "none", duration: 2000 });
+    } finally {
+      this.setData({ saving: false });
+    }
+  },
+
+  toggleDiaryAuth(e) {
+    const allowDiaryAI = e.detail.value;
+    const settings = wx.getStorageSync(KEYS.userSettings) || {};
+    wx.setStorageSync(KEYS.userSettings, Object.assign({}, settings, { allowDiaryAI }));
+    this.setData({ aiDiaryAllowed: allowDiaryAI });
+  },
+
+  openNotes() {
+    wx.navigateTo({ url: "/pages/noteList/noteList" });
   },
 
   goPage(e) {
     wx.navigateTo({ url: e.currentTarget.dataset.path });
+  },
+
+  handleLogout() {
+    wx.showModal({
+      title: "退出登录",
+      content: "只会清理本机登录态，不会删除云端历史数据。",
+      confirmText: "退出",
+      cancelText: "取消",
+      confirmColor: "#ef4444",
+      success: (res) => {
+        if (!res.confirm) return;
+
+        wx.removeStorageSync(LOGIN_STATUS_KEY);
+
+        const app = getApp();
+        app.globalData.isLoggedIn = false;
+        app.globalData.isNewUser = false;
+        Object.assign(app.globalData.user, {
+          openid: "",
+          userId: "",
+          nickname: "",
+          avatarUrl: "",
+          school: "",
+          major: "",
+          grade: "",
+          studyGoal: null,
+          sportGoal: null,
+          sleepGoal: null,
+          entertainmentLimit: null,
+          profileCompleted: false
+        });
+
+        wx.showToast({ title: "已退出登录", icon: "none", duration: 1200 });
+        setTimeout(() => {
+          wx.reLaunch({ url: "/pages/login/login" });
+        }, 500);
+      }
+    });
   }
 });
-

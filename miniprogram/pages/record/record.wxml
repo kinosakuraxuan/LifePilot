@@ -18,8 +18,8 @@
         <view class="label">睡眠 {{form.sleepHours}} 小时</view>
         <slider min="0" max="12" step="0.5" value="{{form.sleepHours}}" data-key="sleepHours" bindchange="updateNumber" activeColor="#7c3aed" />
       </view>
-      <input class="input" value="{{form.mood}}" placeholder="今天的状态，例如：平稳、疲惫、开心" bindinput="updateMood" />
-      <button class="primary-button" bindtap="saveRecord">保存今日记录</button>
+      <input class="input" value="{{form.mood}}" placeholder="心情或简短备注" bindinput="updateMood" />
+      <button class="primary-button" bindtap="saveRecord">保存记录</button>
     </view>
   </view>
 
@@ -30,7 +30,7 @@
         <view class="row">
           <view>
             <view class="record-date">{{item.date}}</view>
-            <view class="muted">学习 {{item.studyMinutes}}m · 运动 {{item.exerciseMinutes}}m · 睡眠 {{item.sleepHours}}h</view>
+            <view class="muted">学习 {{item.studyMinutes}} 分钟 · 运动 {{item.exerciseMinutes}} 分钟 · 睡眠 {{item.sleepHours}} 小时</view>
           </view>
           <view class="pill">{{item.mood || "已记录"}}</view>
         </view>
@@ -38,4 +38,3 @@
     </view>
   </view>
 </view>
-

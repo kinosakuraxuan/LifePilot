@@ -1,18 +1,100 @@
-const { KEYS, appendItem } = require("../../utils/storage");
+const { KEYS, appendItem, getItemById, removeItem, updateItem, readList, writeList } = require("../../utils/storage");
+const { api } = require("../../utils/cloud");
+const { getSafeAreaLayout } = require("../../utils/safeArea");
+
+function pad(value) {
+  return value < 10 ? `0${value}` : `${value}`;
+}
+
+function toDateKey(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function addDays(dateKey, days) {
+  const parts = dateKey.split("-").map(Number);
+  const date = new Date(parts[0], parts[1] - 1, parts[2]);
+  date.setDate(date.getDate() + days);
+  return toDateKey(date);
+}
 
 function formatDateLabel(dateKey) {
-  const parts = dateKey.split("-");
-  return `${parts[0]}\u5e74${Number(parts[1])}\u6708${Number(parts[2])}\u65e5`;
+  const parts = (dateKey || toDateKey(new Date())).split("-").map(Number);
+  return `${parts[0]}年${parts[1]}月${parts[2]}日`;
+}
+
+function formatTime(date) {
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function roundUpToHalfHour(date) {
+  const rounded = new Date(date.getTime());
+  rounded.setSeconds(0, 0);
+  const minutes = rounded.getMinutes();
+  const nextMinutes = minutes === 0 || minutes === 30 ? minutes : minutes < 30 ? 30 : 60;
+  if (nextMinutes === 60) {
+    rounded.setHours(rounded.getHours() + 1, 0, 0, 0);
+  } else {
+    rounded.setMinutes(nextMinutes, 0, 0);
+  }
+  return rounded;
+}
+
+function toDateTime(dateKey, time) {
+  if (!dateKey || !time) return null;
+  const dateParts = dateKey.split("-").map(Number);
+  const timeParts = time.split(":").map(Number);
+  if (dateParts.length !== 3 || timeParts.length !== 2) return null;
+  return new Date(dateParts[0], dateParts[1] - 1, dateParts[2], timeParts[0], timeParts[1], 0, 0);
+}
+
+function addHoursToDateTime(dateKey, time, hours) {
+  const date = toDateTime(dateKey, time);
+  date.setHours(date.getHours() + hours);
+  return {
+    dateKey: toDateKey(date),
+    time: formatTime(date)
+  };
+}
+
+function isEndAfterStart(startDateKey, startTime, endDateKey, endTime) {
+  const startAt = toDateTime(startDateKey, startTime);
+  const endAt = toDateTime(endDateKey, endTime);
+  return !!startAt && !!endAt && endAt.getTime() > startAt.getTime();
+}
+
+function getDefaultDateTime(dateKey) {
+  const startAt = roundUpToHalfHour(new Date());
+  const startDateKey = dateKey || toDateKey(startAt);
+  const startTime = formatTime(startAt);
+  const end = addHoursToDateTime(startDateKey, startTime, 1);
+  return {
+    startDateKey,
+    startTime,
+    endDateKey: end.dateKey,
+    endTime: end.time
+  };
+}
+
+function getEndOneHourAfterStart(startDateKey, startTime) {
+  const end = addHoursToDateTime(startDateKey, startTime, 1);
+  return {
+    endDateKey: end.dateKey,
+    endDate: formatDateLabel(end.dateKey),
+    endTime: end.time
+  };
+}
+
+function createId(prefix) {
+  return `${prefix}${Date.now()}${Math.floor(Math.random() * 1000)}`;
 }
 
 const repeatOptions = [
-  { label: "\u6c38\u4e0d", value: "never" },
-  { label: "\u6bcf\u5929", value: "daily" },
-  { label: "\u6bcf\u5468", value: "weekly" },
-  { label: "\u6bcf2\u5468", value: "biweekly" },
-  { label: "\u6bcf\u6708", value: "monthly" },
-  { label: "\u6bcf\u5e74", value: "yearly" },
-  { label: "\u81ea\u5b9a\u4e49", value: "custom" }
+  { label: "永不重复", value: "never" },
+  { label: "每天", value: "daily" },
+  { label: "每周", value: "weekly" },
+  { label: "每两周", value: "biweekly" },
+  { label: "每月", value: "monthly" },
+  { label: "每年", value: "yearly" }
 ];
 
 const repeatLabels = repeatOptions.reduce((result, item) => {
@@ -20,44 +102,134 @@ const repeatLabels = repeatOptions.reduce((result, item) => {
   return result;
 }, {});
 
+const defaultDateKey = toDateKey(new Date());
+const defaultDateTime = getDefaultDateTime(defaultDateKey);
+
+function findRepeatOption(value) {
+  return repeatOptions.find((item) => item.value === value) || repeatOptions[0];
+}
+
+function formDataFromSchedule(schedule) {
+  const startDateKey = schedule.startDateKey || schedule.dateKey || schedule.date || defaultDateKey;
+  const endDateKey = schedule.endDateKey || startDateKey;
+  const repeatRule = schedule.repeatRule || {};
+  const repeatOption = findRepeatOption(repeatRule.type || "never");
+  const repeatEndDateKey = repeatRule.endDate || addDays(startDateKey, 31);
+  return {
+    title: schedule.title || schedule.name || schedule.courseName || "",
+    location: schedule.location || "",
+    allDay: !!schedule.allDay,
+    startDateKey,
+    endDateKey,
+    startDate: formatDateLabel(startDateKey),
+    endDate: formatDateLabel(endDateKey),
+    startTime: schedule.startTime || schedule.start || defaultDateTime.startTime,
+    endTime: schedule.endTime || schedule.end || defaultDateTime.endTime,
+    hasManualEndTime: true,
+    repeatValue: repeatOption.value,
+    repeatLabel: repeatOption.label,
+    repeatEndDateKey,
+    repeatEndDate: formatDateLabel(repeatEndDateKey),
+    reminder: schedule.reminder || schedule.remindAt || "不提醒",
+    url: schedule.url || "",
+    note: schedule.note || "",
+    longText: schedule.longText || ""
+  };
+}
+
+function refreshPreviousPage() {
+  const pages = getCurrentPages();
+  const prevPage = pages[pages.length - 2];
+  if (!prevPage) return;
+  if (typeof prevPage.setData === "function") {
+    prevPage.setData({ swipedId: "" });
+  }
+  if (typeof prevPage.refreshCalendar === "function") {
+    prevPage.refreshCalendar({ skipCloud: true });
+  }
+  if (typeof prevPage.refreshNotes === "function") {
+    prevPage.refreshNotes({ skipCloud: true });
+  }
+  if (typeof prevPage.loadNotes === "function") {
+    prevPage.loadNotes({ skipCloud: true });
+  }
+}
+
 Page({
   data: {
     title: "",
     location: "",
     allDay: false,
-    startDateKey: "2026-05-30",
-    endDateKey: "2026-05-30",
-    startDate: "2026\u5e745\u670830\u65e5",
-    startTime: "16:00",
-    endDate: "2026\u5e745\u670830\u65e5",
-    endTime: "17:00",
+    startDateKey: defaultDateTime.startDateKey,
+    endDateKey: defaultDateTime.endDateKey,
+    startDate: formatDateLabel(defaultDateTime.startDateKey),
+    startTime: defaultDateTime.startTime,
+    endDate: formatDateLabel(defaultDateTime.endDateKey),
+    endTime: defaultDateTime.endTime,
+    hasManualEndTime: false,
     repeatValue: "never",
-    repeatLabel: "\u6c38\u4e0d",
-    repeatEndMode: "\u4e8e\u65e5\u671f",
-    repeatEndDateKey: "2026-06-30",
-    repeatEndDate: "2026\u5e746\u670830\u65e5",
-    repeatOptions,
-    showRepeatSheet: false,
-    showCustomRepeat: false,
-    customNumbers: Array.from({ length: 30 }, (_, index) => index + 1),
-    customUnits: [
-      { label: "\u5929", value: "day" },
-      { label: "\u5468", value: "week" },
-      { label: "\u6708", value: "month" },
-      { label: "\u5e74", value: "year" }
-    ],
-    customPickerValue: [0, 0],
-    customNumber: 1,
-    customUnit: "day",
-    customUnitLabel: "\u5929",
-    reminder: "\u65e0",
-    reminderOptions: ["\u65e0", "\u5f00\u59cb\u65f6", "\u63d0\u524d10\u5206\u949f", "\u63d0\u524d30\u5206\u949f", "\u63d0\u524d1\u5c0f\u65f6"],
+    repeatLabel: "永不重复",
+    repeatEndMode: "指定日期",
+    repeatEndDateKey: addDays(defaultDateKey, 31),
+    repeatEndDate: formatDateLabel(addDays(defaultDateKey, 31)),
+    repeatOptionLabels: repeatOptions.map((item) => item.label),
+    reminder: "不提醒",
+    reminderOptions: ["不提醒", "开始时", "提前 10 分钟", "提前 30 分钟", "提前 1 小时"],
     url: "",
     note: "",
-    longText: ""
+    longText: "",
+    pageMode: "create",
+    editId: "",
+    editDateKey: "",
+    originalSchedule: null,
+    pageTitle: "新增日程",
+    actionText: "添加",
+    topBarStyle: "",
+    leftActionStyle: "",
+    rightActionStyle: ""
   },
 
-  noop() {},
+  onLoad(options) {
+    const isEdit = options && options.mode === "edit" && options.id;
+    const existing = isEdit ? getItemById(KEYS.schedules, options.id) : null;
+    if (isEdit && !existing) {
+      wx.showToast({ title: "未找到日程", icon: "none" });
+    }
+    const todayDateKey = toDateKey(new Date());
+    const dateKey = options && (options.startDateKey || options.dateKey) ? options.startDateKey || options.dateKey : todayDateKey;
+    const defaults = getDefaultDateTime(dateKey);
+    const startTime = options && options.startTime ? options.startTime : defaults.startTime;
+    const defaultEnd = getEndOneHourAfterStart(dateKey, startTime);
+    const endDateKey = options && options.endDateKey ? options.endDateKey : defaultEnd.endDateKey;
+    const endTime = options && options.endTime ? options.endTime : defaultEnd.endTime;
+    const repeatEndDateKey = addDays(dateKey, 31);
+    const layout = getSafeAreaLayout();
+    const nextData = {
+      topBarStyle: layout.topBarStyle,
+      leftActionStyle: layout.leftActionStyle,
+      rightActionStyle: layout.rightActionStyle,
+      startDateKey: dateKey,
+      endDateKey,
+      startDate: formatDateLabel(dateKey),
+      startTime,
+      endDate: formatDateLabel(endDateKey),
+      endTime,
+      hasManualEndTime: !!(options && (options.endDateKey || options.endTime)),
+      repeatEndDateKey,
+      repeatEndDate: formatDateLabel(repeatEndDateKey)
+    };
+    if (existing) {
+      Object.assign(nextData, {
+        pageMode: "edit",
+        editId: options.id,
+        editDateKey: options.dateKey || existing.startDateKey || existing.dateKey || dateKey,
+        originalSchedule: existing,
+        pageTitle: "编辑日程",
+        actionText: "完成"
+      }, formDataFromSchedule(existing));
+    }
+    this.setData(nextData);
+  },
 
   updateField(e) {
     const key = e.currentTarget.dataset.key;
@@ -70,8 +242,19 @@ Page({
     if (allDay) {
       updates.endDateKey = this.data.startDateKey;
       updates.endDate = this.data.startDate;
+    } else if (!this.data.hasManualEndTime) {
+      Object.assign(updates, getEndOneHourAfterStart(this.data.startDateKey, this.data.startTime));
     }
     this.setData(updates);
+  },
+
+  adjustInvalidEnd(updates, toastTitle) {
+    const nextData = Object.assign({}, this.data, updates);
+    if (nextData.allDay || isEndAfterStart(nextData.startDateKey, nextData.startTime, nextData.endDateKey, nextData.endTime)) {
+      return updates;
+    }
+    if (toastTitle) wx.showToast({ title: toastTitle, icon: "none" });
+    return Object.assign(updates, getEndOneHourAfterStart(nextData.startDateKey, nextData.startTime));
   },
 
   onStartDateChange(e) {
@@ -83,31 +266,44 @@ Page({
     if (this.data.allDay) {
       updates.endDateKey = value;
       updates.endDate = formatDateLabel(value);
+    } else if (!this.data.hasManualEndTime) {
+      Object.assign(updates, getEndOneHourAfterStart(value, this.data.startTime));
+    } else {
+      this.adjustInvalidEnd(updates, "已自动调整结束时间");
+    }
+    this.setData(updates);
+  },
+
+  onStartTimeChange(e) {
+    if (this.data.allDay) return;
+    const value = e.detail.value;
+    const updates = { startTime: value };
+    if (!this.data.hasManualEndTime) {
+      Object.assign(updates, getEndOneHourAfterStart(this.data.startDateKey, value));
+    } else {
+      this.adjustInvalidEnd(updates, "已自动调整结束时间");
     }
     this.setData(updates);
   },
 
   onEndDateChange(e) {
-    if (this.data.allDay) {
-      return;
-    }
+    if (this.data.allDay) return;
     const value = e.detail.value;
-    this.setData({
+    const updates = this.adjustInvalidEnd({
+      hasManualEndTime: true,
       endDateKey: value,
       endDate: formatDateLabel(value)
-    });
-  },
-
-  onStartTimeChange(e) {
-    if (!this.data.allDay) {
-      this.setData({ startTime: e.detail.value });
-    }
+    }, "结束时间必须晚于开始时间，已自动调整");
+    this.setData(updates);
   },
 
   onEndTimeChange(e) {
-    if (!this.data.allDay) {
-      this.setData({ endTime: e.detail.value });
-    }
+    if (this.data.allDay) return;
+    const updates = this.adjustInvalidEnd({
+      hasManualEndTime: true,
+      endTime: e.detail.value
+    }, "结束时间必须晚于开始时间，已自动调整");
+    this.setData(updates);
   },
 
   onRepeatEndDateChange(e) {
@@ -119,53 +315,15 @@ Page({
   },
 
   onReminderChange(e) {
-    const reminder = this.data.reminderOptions[Number(e.detail.value)] || "\u65e0";
+    const reminder = this.data.reminderOptions[Number(e.detail.value)] || "不提醒";
     this.setData({ reminder });
   },
 
-  openRepeatSheet() {
-    this.setData({ showRepeatSheet: true, showCustomRepeat: false });
-  },
-
-  closeRepeatSheet() {
-    this.setData({ showRepeatSheet: false });
-  },
-
-  selectRepeat(e) {
-    const value = e.currentTarget.dataset.value;
-    if (value === "custom") {
-      this.setData({ showRepeatSheet: false, showCustomRepeat: true });
-      return;
-    }
+  onRepeatChange(e) {
+    const option = repeatOptions[Number(e.detail.value)] || repeatOptions[0];
     this.setData({
-      repeatValue: value,
-      repeatLabel: repeatLabels[value] || "\u6c38\u4e0d",
-      showRepeatSheet: false
-    });
-  },
-
-  backToRepeatSheet() {
-    this.setData({ showCustomRepeat: false, showRepeatSheet: true });
-  },
-
-  onCustomPickerChange(e) {
-    const pickerValue = e.detail.value;
-    const numberIndex = pickerValue[0] || 0;
-    const unitIndex = pickerValue[1] || 0;
-    const unit = this.data.customUnits[unitIndex] || this.data.customUnits[0];
-    this.setData({
-      customPickerValue: pickerValue,
-      customNumber: this.data.customNumbers[numberIndex] || 1,
-      customUnit: unit.value,
-      customUnitLabel: unit.label
-    });
-  },
-
-  confirmCustomRepeat() {
-    this.setData({
-      repeatValue: "custom",
-      repeatLabel: `\u6bcf${this.data.customNumber}${this.data.customUnitLabel}`,
-      showCustomRepeat: false
+      repeatValue: option.value,
+      repeatLabel: repeatLabels[option.value] || "永不重复"
     });
   },
 
@@ -173,44 +331,58 @@ Page({
     wx.navigateBack();
   },
 
-  saveSchedule() {
-    const title = this.data.title.trim();
-    if (!title) {
-      wx.showToast({ title: "\u8bf7\u8f93\u5165\u6807\u9898", icon: "none" });
-      return;
-    }
-
-    const [year, month, day] = this.data.startDateKey.split("-").map(Number);
-    appendItem(KEYS.schedules, {
-      title,
-      type: "\u65e5\u7a0b",
+  buildSchedulePatch(id) {
+    const dateParts = this.data.startDateKey.split("-").map(Number);
+    return {
+      id,
+      clientId: id,
+      title: this.data.title.trim(),
+      type: "schedule",
       date: this.data.startDate,
       dateKey: this.data.startDateKey,
-      year,
-      month,
-      day,
+      year: dateParts[0],
+      month: dateParts[1],
+      day: dateParts[2],
       startDateKey: this.data.startDateKey,
       endDateKey: this.data.allDay ? this.data.startDateKey : this.data.endDateKey,
       startTime: this.data.allDay ? "" : this.data.startTime,
       endTime: this.data.allDay ? "" : this.data.endTime,
       location: this.data.location.trim(),
       reminder: this.data.reminder,
-      remindAt: this.data.reminder,
       repeat: this.data.repeatLabel,
-      repeatEndMode: this.data.repeatValue === "never" ? "" : this.data.repeatEndMode,
-      repeatEndDateKey: this.data.repeatValue === "never" ? "" : this.data.repeatEndDateKey,
       repeatRule: {
         type: this.data.repeatValue,
-        interval: this.data.repeatValue === "custom" ? this.data.customNumber : 1,
-        unit: this.data.repeatValue === "custom" ? this.data.customUnit : this.data.repeatValue
+        interval: this.data.repeatValue === "biweekly" ? 2 : 1,
+        endDate: this.data.repeatValue === "never" ? "" : this.data.repeatEndDateKey
       },
       url: this.data.url.trim(),
       note: this.data.note || this.data.longText,
       allDay: this.data.allDay,
-      status: "pending"
-    });
+      status: "todo"
+    };
+  },
 
-    wx.showToast({ title: "\u5df2\u6dfb\u52a0", icon: "success" });
+  validateForm() {
+    if (!this.data.title.trim()) {
+      wx.showToast({ title: "请输入标题", icon: "none" });
+      return false;
+    }
+    if (!this.data.allDay) {
+      if (!this.data.startDateKey || !this.data.startTime || !this.data.endDateKey || !this.data.endTime) {
+        wx.showToast({ title: "请完善开始和结束时间", icon: "none" });
+        return false;
+      }
+      if (!isEndAfterStart(this.data.startDateKey, this.data.startTime, this.data.endDateKey, this.data.endTime)) {
+        wx.showToast({ title: "结束时间必须晚于开始时间", icon: "none" });
+        return false;
+      }
+    }
+    return true;
+  },
+
+  finishSave(toastTitle) {
+    refreshPreviousPage();
+    wx.showToast({ title: toastTitle, icon: "success" });
     setTimeout(() => {
       const pages = getCurrentPages();
       if (pages.length > 1) {
@@ -221,7 +393,149 @@ Page({
     }, 450);
   },
 
+  saveSchedule() {
+    if (!this.validateForm()) return;
+    if (this.data.pageMode === "edit" && this.data.editId) {
+      this.saveEditedSchedule();
+      return;
+    }
+    const id = createId("s");
+    const schedule = this.buildSchedulePatch(id);
+    appendItem(KEYS.schedules, schedule);
+    api.schedule.create(schedule).catch((error) => {
+      console.warn("schedule create pending local only", error.message);
+    });
+    this.finishSave("已添加");
+  },
+
+  saveEditedSchedule() {
+    const id = this.data.editId;
+    const original = getItemById(KEYS.schedules, id) || this.data.originalSchedule;
+    if (!original) {
+      wx.showToast({ title: "未找到日程", icon: "none" });
+      return;
+    }
+    const repeatRule = original.repeatRule || {};
+    const isRepeating = repeatRule.type && repeatRule.type !== "never";
+    const storageId = original.id || original.clientId || id;
+    const patch = this.buildSchedulePatch(storageId);
+    if (!isRepeating) {
+      const updated = updateItem(KEYS.schedules, id, patch);
+      api.schedule.update(Object.assign({}, updated || patch, { id })).catch((error) => {
+        console.warn("schedule update pending local only", error.message);
+      });
+      this.finishSave("已保存");
+      return;
+    }
+    wx.showActionSheet({
+      itemList: ["仅修改当天", "修改全部重复日程"],
+      success: (res) => {
+        if (res.tapIndex === 0) this.saveSingleOccurrence(original, patch);
+        if (res.tapIndex === 1) this.saveAllRepeating(id, patch, original);
+      }
+    });
+  },
+
+  saveAllRepeating(id, patch, original) {
+    const nextPatch = Object.assign({}, patch, {
+      excludedDates: Array.isArray(original.excludedDates) ? original.excludedDates.slice() : []
+    });
+    const updated = updateItem(KEYS.schedules, id, nextPatch);
+    api.schedule.update(Object.assign({}, updated || nextPatch, { id })).catch((error) => {
+      console.warn("schedule update pending local only", error.message);
+    });
+    this.finishSave("已保存全部重复日程");
+  },
+
+  saveSingleOccurrence(original, patch) {
+    const sourceDateKey = this.data.editDateKey || original.startDateKey || original.dateKey || patch.startDateKey;
+    const excludedDates = Array.isArray(original.excludedDates) ? original.excludedDates.slice() : [];
+    if (!excludedDates.includes(sourceDateKey)) excludedDates.push(sourceDateKey);
+    updateItem(KEYS.schedules, this.data.editId, { excludedDates });
+    api.schedule.update({ id: this.data.editId, excludedDates }).catch(() => {});
+
+    const newId = createId("s");
+    const single = Object.assign({}, patch, {
+      id: newId,
+      clientId: newId,
+      repeat: "永不重复",
+      repeatRule: { type: "never", interval: 1, endDate: "" },
+      excludedDates: []
+    });
+    appendItem(KEYS.schedules, single);
+    api.schedule.create(single).catch((error) => {
+      console.warn("schedule create occurrence pending local only", error.message);
+    });
+    this.finishSave("已修改当天日程");
+  },
+
+  navigateBackAfterDelete() {
+    refreshPreviousPage();
+    setTimeout(() => {
+      const pages = getCurrentPages();
+      if (pages.length > 1) {
+        wx.navigateBack();
+      } else {
+        wx.switchTab({ url: "/pages/home/home" });
+      }
+    }, 350);
+  },
+
+  deleteCurrentSchedule() {
+    const id = this.data.editId;
+    if (!id) {
+      wx.showToast({ title: "未找到日程", icon: "none" });
+      return;
+    }
+    const schedule = getItemById(KEYS.schedules, id);
+    if (!schedule) {
+      wx.showToast({ title: "未找到日程", icon: "none" });
+      return;
+    }
+    const repeatRule = schedule.repeatRule || {};
+    const isRepeating = repeatRule.type && repeatRule.type !== "never";
+    const deleteAll = (toastTitle) => {
+      removeItem(KEYS.schedules, id);
+      api.schedule.delete(id).catch(() => {});
+      wx.showToast({ title: toastTitle, icon: "success" });
+      this.navigateBackAfterDelete();
+    };
+    const deleteOccurrence = () => {
+      const occurrenceDateKey = this.data.editDateKey || this.data.startDateKey;
+      const excludedDates = Array.isArray(schedule.excludedDates) ? schedule.excludedDates.slice() : [];
+      if (!excludedDates.includes(occurrenceDateKey)) excludedDates.push(occurrenceDateKey);
+      updateItem(KEYS.schedules, id, { excludedDates });
+      api.schedule.update({ id, excludedDates }).catch(() => {});
+      wx.showToast({ title: "已删除当天日程", icon: "success" });
+      this.navigateBackAfterDelete();
+    };
+
+    if (isRepeating) {
+      wx.showActionSheet({
+        itemList: ["仅删除当天", "删除全部重复日程"],
+        itemColor: "#ef4444",
+        success: (res) => {
+          if (res.tapIndex === 0) deleteOccurrence();
+          if (res.tapIndex === 1) deleteAll("已删除全部重复日程");
+        }
+      });
+      return;
+    }
+
+    wx.showModal({
+      title: "删除日程",
+      content: "删除后该日程将不再显示。",
+      confirmText: "删除",
+      cancelText: "取消",
+      confirmColor: "#ef4444",
+      success: (res) => {
+        if (!res.confirm) return;
+        deleteAll("已删除");
+      }
+    });
+  },
+
   startVoice() {
-    wx.showToast({ title: "\u8bed\u97f3\u5165\u53e3\u9884\u7559", icon: "none" });
+    wx.navigateTo({ url: "/pages/schedule/schedule" });
   }
 });

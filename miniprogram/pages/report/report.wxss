@@ -1,10 +1,12 @@
 .report-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 16rpx;
 }
 
 .report-card {
+  box-sizing: border-box;
+  width: calc((100% - 16rpx) / 2);
   padding: 28rpx;
   border: 1rpx solid #e2e8f0;
   border-radius: 18rpx;

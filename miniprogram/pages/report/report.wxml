@@ -1,33 +1,33 @@
 <view class="page report-page">
   <view class="section">
-    <view class="section-title">本周数据化周报</view>
+    <view class="section-title">周报</view>
     <view class="report-grid">
       <view class="report-card">
-        <view class="report-value">{{stats.studyHours}}h</view>
-        <view class="muted">学习总时长</view>
+        <text class="report-value">{{stats.studyHours}}小时</text>
+        <text class="muted">学习</text>
       </view>
       <view class="report-card">
-        <view class="report-value">{{stats.entertainmentHours}}h</view>
-        <view class="muted">娱乐总时长</view>
+        <text class="report-value">{{stats.entertainmentHours}}小时</text>
+        <text class="muted">娱乐</text>
       </view>
       <view class="report-card">
-        <view class="report-value">{{stats.exerciseMinutes}}m</view>
-        <view class="muted">运动总时长</view>
+        <text class="report-value">{{stats.exerciseMinutes}}分钟</text>
+        <text class="muted">运动</text>
       </view>
       <view class="report-card">
-        <view class="report-value">{{stats.sleepAvg}}h</view>
-        <view class="muted">平均睡眠</view>
+        <text class="report-value">{{stats.sleepAvg}}小时</text>
+        <text class="muted">平均睡眠</text>
       </view>
     </view>
   </view>
 
   <view class="section">
-    <view class="section-title">五维雷达图</view>
+    <view class="section-title">五维状态</view>
     <view class="card radar-card">
       <view class="radar-bg"></view>
       <view class="radar-point {{item.cls}}" wx:for="{{radar}}" wx:key="label" style="--v: {{item.value}}%;">
         <view class="radar-dot"></view>
-        <view class="radar-label">{{item.label}} {{item.value}}</view>
+        <text class="radar-label">{{item.label}} {{item.value}}</text>
       </view>
     </view>
   </view>
@@ -36,7 +36,7 @@
     <view class="section-title">学习柱状图</view>
     <view class="card chart-card">
       <view class="bar-row" wx:for="{{studyBars}}" wx:key="label">
-        <view class="bar-label">{{item.label}}</view>
+        <text class="bar-label">{{item.label}}</text>
         <view class="bar-track">
           <view class="bar-fill" style="width: {{item.width}}%;"></view>
         </view>
@@ -45,17 +45,17 @@
   </view>
 
   <view class="section">
-    <view class="section-title">睡眠趋势图</view>
+    <view class="section-title">睡眠趋势</view>
     <view class="card sleep-chart">
       <view class="sleep-column" wx:for="{{sleepLine}}" wx:key="label">
         <view class="sleep-bar" style="height: {{item.height}}%;"></view>
-        <view class="sleep-label">{{item.label}}</view>
+        <text class="sleep-label">{{item.label}}</text>
       </view>
     </view>
   </view>
 
   <view class="section">
-    <view class="section-title">生活占比图</view>
+    <view class="section-title">生活占比</view>
     <view class="card stack">
       <view wx:for="{{balanceDonut}}" wx:key="label">
         <view class="dist-row">
@@ -70,12 +70,12 @@
   </view>
 
   <view class="section">
-    <view class="section-title">日记参与分析</view>
+    <view class="section-title">笔记分析</view>
     <view class="card">
       <view class="row">
         <view>
-          <view class="auth-title">允许 AI 读取本周日记与灵感</view>
-          <view class="muted">用于生成关键词、情绪变化和成长建议</view>
+          <text class="auth-title">允许 AI 阅读本周笔记</text>
+          <text class="muted">用于关键词、情绪变化和建议生成。</text>
         </view>
         <switch checked="{{diaryAuth}}" bindchange="toggleDiaryAuth" />
       </view>
@@ -83,9 +83,9 @@
   </view>
 
   <view class="section">
-    <view class="section-title">AI 周报建议</view>
+    <view class="section-title">建议</view>
     <view class="card">
-      <view class="advice">{{advice}}</view>
+      <text class="advice">{{advice}}</text>
     </view>
   </view>
 </view>

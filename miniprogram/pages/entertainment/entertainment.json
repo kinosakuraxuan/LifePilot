@@ -1,4 +1,4 @@
 {
-  "navigationBarTitleText": "娱乐"
+  "navigationStyle": "custom",
+  "disableScroll": true
 }
-

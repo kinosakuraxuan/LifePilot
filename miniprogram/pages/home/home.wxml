@@ -1,45 +1,57 @@
-<view class="calendar-shell">
-  <view class="top-bar">
-    <view class="month-left">
-      <text class="month-text">{{monthTitle}}</text>
-    </view>
-    <view class="top-actions">
-      <view class="search-icon" bindtap="goSearch">⌕</view>
-      <button class="top-add" bindtap="addSchedule">＋</button>
-    </view>
-  </view>
-
-  <view class="weekday-row">
-    <view class="weekday" wx:for="{{weekdays}}" wx:key="*this">{{item}}</view>
-  </view>
-
-  <view class="simple-month" bindtouchstart="onMonthTouchStart" bindtouchend="onMonthTouchEnd">
-    <view class="simple-day {{item.disabled ? 'empty-day' : ''}} {{item.selected && !item.isToday ? 'selected-day' : ''}} {{item.selected && item.isToday ? 'today-selected' : ''}}" wx:for="{{days}}" wx:key="id" data-day="{{item.day}}" bindtap="selectDay">
-      <view class="date-number" wx:if="{{!item.disabled}}">{{item.day}}</view>
-      <view class="lunar" wx:if="{{!item.disabled}}">{{item.lunar}}</view>
-      <view class="dot" wx:if="{{item.hasCourse}}"></view>
-    </view>
-  </view>
-
-  <view class="agenda-area">
-    <block wx:if="{{events.length}}">
-      <view class="swipe-row" wx:for="{{events}}" wx:key="id" data-id="{{item.id}}" bindtouchstart="onAgendaTouchStart" bindtouchend="onAgendaTouchEnd">
-        <view class="swipe-action">
-          <button class="swipe-delete" data-id="{{item.id}}" catchtap="deleteSchedule">删除</button>
-        </view>
-        <view class="agenda-item swipe-content {{swipedId === item.id ? 'is-open' : ''}}">
-          <view class="accent"></view>
-          <view class="agenda-main">
-            <view class="agenda-title">{{item.title}}</view>
-            <view class="agenda-location">{{item.location}}</view>
-          </view>
-          <view class="agenda-time">
-            <view>{{item.start}}</view>
-            <view>{{item.end}}</view>
-          </view>
-        </view>
+<view class="home-root">
+  <scroll-view class="calendar-shell" type="list" scroll-y="true">
+    <view class="top-bar" style="{{topBarStyle}}">
+      <view class="month-left">
+        <text class="month-text">{{monthTitle}}</text>
       </view>
-    </block>
-    <view class="empty-agenda" wx:else>无日程</view>
-  </view>
+      <view class="top-actions" style="{{topActionsStyle}}">
+        <button class="search-icon" style="{{searchTriggerStyle}}" bindtap="goSearch">
+          <view class="search-shape" style="{{searchIconStyle}}"></view>
+        </button>
+        <button class="top-add" style="{{addTriggerStyle}}" bindtap="addSchedule"><text class="top-add-symbol" style="{{addIconStyle}}">+</text></button>
+      </view>
+    </view>
+
+    <view class="weekday-row">
+      <view class="weekday" wx:for="{{weekdays}}" wx:key="*this">
+        <text>{{item}}</text>
+      </view>
+    </view>
+
+    <view class="simple-month" bindtouchstart="onMonthTouchStart" bindtouchend="onMonthTouchEnd">
+      <view class="simple-day {{item.disabled ? 'empty-day' : ''}} {{item.selected && !item.isToday ? 'selected-day' : ''}} {{item.selected && item.isToday ? 'today-selected' : ''}}" wx:for="{{days}}" wx:key="id" data-day="{{item.day}}" bindtap="selectDay">
+        <text class="date-number" wx:if="{{!item.disabled}}">{{item.day}}</text>
+        <text class="lunar" wx:if="{{!item.disabled}}">{{item.lunar}}</text>
+        <view class="dot" wx:if="{{item.hasCourse}}"></view>
+      </view>
+    </view>
+
+    <view class="agenda-area">
+      <block wx:if="{{events.length}}">
+        <view class="swipe-row" wx:for="{{events}}" wx:key="id" data-id="{{item.id}}" data-date="{{item.occurrenceDateKey}}" bindlongpress="editSchedule">
+          <view class="agenda-item">
+            <view class="accent"></view>
+            <view class="agenda-main">
+              <text class="agenda-title" overflow="ellipsis" max-lines="1">{{item.title}}</text>
+              <text class="agenda-location">{{item.location}}</text>
+            </view>
+            <view class="agenda-time">
+              <text>{{item.start}}</text>
+              <text>{{item.end}}</text>
+            </view>
+          </view>
+        </view>
+      </block>
+      <view class="empty-agenda" wx:else>
+        <text>暂无日程</text>
+      </view>
+    </view>
+  </scroll-view>
+
+  <button
+    class="boundless-corner-trigger"
+    bindtap="openTodayBoundless"
+  >
+    <image class="trigger-icon-box" src="/assets/icons/boundless-note-trigger.png" mode="aspectFit"></image>
+  </button>
 </view>

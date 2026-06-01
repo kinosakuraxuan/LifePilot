@@ -1,103 +1,136 @@
 .discover-page {
-  padding-bottom: 40rpx;
+  box-sizing: border-box;
+  height: 100vh;
+  padding: calc(32rpx + env(safe-area-inset-top)) 28rpx calc(56rpx + env(safe-area-inset-bottom));
+  background: #f8fafc;
 }
 
 .discover-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 34rpx 30rpx;
   border-radius: 20rpx;
-  background: linear-gradient(135deg, #fee2e2, #ffffff);
+  background: linear-gradient(135deg, #fff7ed 0%, #eff6ff 100%);
 }
 
 .hero-title {
+  display: block;
   margin: 10rpx 0;
   font-size: 44rpx;
   font-weight: 800;
 }
 
 .hero-subtitle {
+  display: block;
   color: #475569;
+  font-size: 25rpx;
+}
+
+.note-entry {
+  min-width: 132rpx;
+  height: 64rpx;
+  border-radius: 999rpx;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 26rpx;
+  line-height: 64rpx;
 }
 
 .quadrant-board {
   position: relative;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 18rpx;
   margin: 30rpx 0;
-  min-height: 560rpx;
+  min-height: 584rpx;
+}
+
+.quadrant-row {
+  display: flex;
+  gap: 18rpx;
+  margin-bottom: 18rpx;
 }
 
 .quadrant {
   box-sizing: border-box;
-  min-height: 270rpx;
-  padding: 30rpx;
-  border-radius: 28rpx;
-  background: #ffffff;
-  border: 1rpx solid #e2e8f0;
+  flex: 1;
+  min-width: 0;
+  min-height: 284rpx;
+  padding: 30rpx 26rpx;
+  border: 1rpx solid rgba(15, 23, 42, 0.06);
+  border-radius: 26rpx;
   box-shadow: 0 18rpx 36rpx rgba(15, 23, 42, 0.07);
 }
 
-.q-entertainment {
-  background: #fff7ed;
+.q-study { background: linear-gradient(160deg, #fef3c7 0%, #ffffff 100%); }
+.q-sport { background: linear-gradient(160deg, #dcfce7 0%, #ffffff 100%); }
+.q-entertainment { background: linear-gradient(160deg, #fce7f3 0%, #ffffff 100%); }
+.q-sleep { background: linear-gradient(160deg, #e0e7ff 0%, #ffffff 100%); }
+
+.quadrant-kicker,
+.quadrant-title,
+.quadrant-value,
+.quadrant-desc {
+  display: block;
 }
 
-.q-sleep {
-  background: #f5f3ff;
-}
-
-.q-sport {
-  background: #f0fdf4;
-}
-
-.q-music {
-  background: #fff1f2;
+.quadrant-kicker {
+  color: #64748b;
+  font-size: 22rpx;
+  font-weight: 700;
 }
 
 .quadrant-title {
-  font-size: 36rpx;
+  margin-top: 8rpx;
+  font-size: 38rpx;
   font-weight: 900;
 }
 
 .quadrant-value {
-  margin: 28rpx 0 12rpx;
-  font-size: 50rpx;
+  margin: 24rpx 0 12rpx;
+  font-size: 46rpx;
   font-weight: 900;
 }
 
 .quadrant-desc {
   color: #64748b;
-  font-size: 26rpx;
+  font-size: 24rpx;
+  line-height: 1.45;
 }
 
-.report-center {
+.pomodoro-center {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 156rpx;
-  height: 156rpx;
-  min-width: 156rpx;
-  min-height: 156rpx;
-  padding: 0;
+  width: 166rpx;
+  height: 166rpx;
+  min-width: 166rpx;
+  min-height: 166rpx;
   border-radius: 50%;
   background: #ef4444;
   color: #ffffff;
-  box-shadow: 0 20rpx 42rpx rgba(239, 68, 68, 0.34);
+  box-shadow: 0 22rpx 44rpx rgba(239, 68, 68, 0.35);
+  transform: translate(-50%, -50%);
 }
 
-.report-main {
-  font-size: 36rpx;
+.pomodoro-main {
+  font-size: 32rpx;
   font-weight: 900;
 }
 
-.report-sub {
+.pomodoro-sub {
   margin-top: 6rpx;
-  font-size: 24rpx;
+  font-size: 23rpx;
   opacity: 0.86;
+}
+
+.section-title {
+  display: block;
+  margin-bottom: 16rpx;
+  font-size: 32rpx;
+  font-weight: 800;
 }
 
 .advice {

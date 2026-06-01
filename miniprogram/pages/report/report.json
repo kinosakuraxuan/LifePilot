@@ -1,4 +1,4 @@
 {
-  "navigationBarTitleText": "周报"
+  "navigationStyle": "custom",
+  "disableScroll": true
 }
-

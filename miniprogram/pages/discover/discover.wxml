@@ -1,29 +1,56 @@
-<view class="page discover-page">
+<scroll-view class="discover-page" type="list" scroll-y="true">
   <view class="discover-hero">
     <view>
-      <view class="muted">发现</view>
-      <view class="hero-title">生活状态地图</view>
-      <view class="hero-subtitle">娱乐、睡眠、运动、音乐围绕周报展开</view>
+      <text class="muted">发现</text>
+      <text class="hero-title">生活象限</text>
+      <text class="hero-subtitle">{{overview.weekRange || '本周'}} · 得分 {{overview.totalScore || 0}}</text>
     </view>
+    <button class="note-entry" bindtap="goBoundless">
+      <text>笔记</text>
+    </button>
   </view>
 
   <view class="quadrant-board">
-    <view class="quadrant {{item.cls}}" wx:for="{{quadrants}}" wx:key="title" data-path="{{item.path}}" bindtap="goModule">
-      <view class="quadrant-title">{{item.title}}</view>
-      <view class="quadrant-value">{{item.value}}</view>
-      <view class="quadrant-desc">{{item.desc}}</view>
+    <view class="quadrant-row">
+      <view class="quadrant {{quadrants[0].cls}}" data-path="{{quadrants[0].path}}" bindtap="goModule">
+        <text class="quadrant-kicker">专注</text>
+        <text class="quadrant-title">{{quadrants[0].title}}</text>
+        <text class="quadrant-value">{{quadrants[0].value}}</text>
+        <text class="quadrant-desc" overflow="ellipsis" max-lines="2">{{quadrants[0].desc}}</text>
+      </view>
+      <view class="quadrant {{quadrants[1].cls}}" data-path="{{quadrants[1].path}}" bindtap="goModule">
+        <text class="quadrant-kicker">活动</text>
+        <text class="quadrant-title">{{quadrants[1].title}}</text>
+        <text class="quadrant-value">{{quadrants[1].value}}</text>
+        <text class="quadrant-desc" overflow="ellipsis" max-lines="2">{{quadrants[1].desc}}</text>
+      </view>
     </view>
-    <button class="report-center" bindtap="goReport">
-      <view class="report-main">周报</view>
-      <view class="report-sub">进入</view>
+
+    <view class="quadrant-row">
+      <view class="quadrant {{quadrants[2].cls}}" data-path="{{quadrants[2].path}}" bindtap="goModule">
+        <text class="quadrant-kicker">娱乐</text>
+        <text class="quadrant-title">{{quadrants[2].title}}</text>
+        <text class="quadrant-value">{{quadrants[2].value}}</text>
+        <text class="quadrant-desc" overflow="ellipsis" max-lines="2">{{quadrants[2].desc}}</text>
+      </view>
+      <view class="quadrant {{quadrants[3].cls}}" data-path="{{quadrants[3].path}}" bindtap="goModule">
+        <text class="quadrant-kicker">休息</text>
+        <text class="quadrant-title">{{quadrants[3].title}}</text>
+        <text class="quadrant-value">{{quadrants[3].value}}</text>
+        <text class="quadrant-desc" overflow="ellipsis" max-lines="2">{{quadrants[3].desc}}</text>
+      </view>
+    </view>
+
+    <button class="pomodoro-center" bindtap="goPomodoro">
+      <text class="pomodoro-main">番茄钟</text>
+      <text class="pomodoro-sub">开始</text>
     </button>
   </view>
 
   <view class="section">
-    <view class="section-title">AI 综合提醒</view>
+    <text class="section-title">AI 提醒</text>
     <view class="card advice">
-      本周学习状态稳定，但晚间娱乐时间偏晚，可能影响睡眠质量。建议把娱乐结束时间提前到 22:30，并在周末补一次 30 分钟运动。
+      <text>{{overview.summary || '添加记录后会生成更有用的本周提醒。'}}</text>
     </view>
   </view>
-</view>
-
+</scroll-view>

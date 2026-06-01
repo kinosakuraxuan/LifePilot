@@ -3,11 +3,11 @@
     <view class="section-title">娱乐看板</view>
     <view class="panel-grid">
       <view class="panel-card">
-        <view class="big-number">{{entertainment.todayMinutes}}m</view>
+        <view class="big-number">{{entertainment.todayMinutes}}分钟</view>
         <view class="muted">今日娱乐</view>
       </view>
       <view class="panel-card">
-        <view class="big-number">{{entertainment.limitMinutes}}m</view>
+        <view class="big-number">{{entertainment.limitMinutes}}分钟</view>
         <view class="muted">每日建议上限</view>
       </view>
       <view class="panel-card">
@@ -43,4 +43,3 @@
 
   <button class="primary-button" bindtap="addEntertainment">记录娱乐时间</button>
 </view>
-

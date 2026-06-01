@@ -3,7 +3,7 @@
     <view class="section-title">运动看板</view>
     <view class="panel-grid">
       <view class="panel-card">
-        <view class="big-number">{{sport.todayMinutes}}m</view>
+        <view class="big-number">{{sport.todayMinutes}}分钟</view>
         <view class="muted">今日运动</view>
       </view>
       <view class="panel-card">
@@ -12,7 +12,7 @@
       </view>
       <view class="panel-card">
         <view class="big-number">{{sport.calories}}</view>
-        <view class="muted">估算消耗 kcal</view>
+        <view class="muted">估算消耗 千卡</view>
       </view>
       <view class="panel-card">
         <view class="big-number">{{sport.types.length}}</view>
@@ -47,4 +47,3 @@
 
   <button class="primary-button" bindtap="addSport">记录一次运动</button>
 </view>
-
