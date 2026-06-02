@@ -121,11 +121,58 @@ const repeatLabels = repeatOptions.reduce((result, item) => {
   return result;
 }, {});
 
+const scheduleTypeMap = {
+  meeting: "meeting",
+  task: "task",
+  course: "course",
+  reminder: "schedule",
+  other: "schedule"
+};
+
+const missingFieldLabels = {
+  title: "标题",
+  type: "类型",
+  date: "日期",
+  startTime: "开始时间",
+  endTime: "结束时间",
+  location: "地点",
+  participants: "参与人",
+  description: "备注",
+  reminder: "提醒",
+  repeat: "重复"
+};
+
 const defaultDateKey = toDateKey(new Date());
 const defaultDateTime = getDefaultDateTime(defaultDateKey);
 
 function findRepeatOption(value) {
   return repeatOptions.find((item) => item.value === value) || repeatOptions[0];
+}
+
+function normalizeRepeatRule(rule) {
+  const value = String(rule || "").toLowerCase();
+  if (["daily", "weekly", "biweekly", "monthly", "yearly"].includes(value)) return value;
+  if (value.includes("day") || value.includes("每天")) return "daily";
+  if (value.includes("week") || value.includes("每周")) return "weekly";
+  if (value.includes("month") || value.includes("每月")) return "monthly";
+  if (value.includes("year") || value.includes("每年")) return "yearly";
+  return "never";
+}
+
+function reminderLabelFromParsed(reminder) {
+  if (!reminder || !reminder.enabled) return "不提醒";
+  const minutes = Number(reminder.minutesBefore);
+  if (!minutes) return "开始时";
+  if (minutes <= 10) return "提前 10 分钟";
+  if (minutes <= 30) return "提前 30 分钟";
+  return "提前 1 小时";
+}
+
+function formatMissingFields(fields) {
+  return (fields || [])
+    .map((field) => missingFieldLabels[field] || field)
+    .filter(Boolean)
+    .join("、");
 }
 
 function formDataFromSchedule(schedule, occurrenceDateKey) {
@@ -198,6 +245,12 @@ Page({
     url: "",
     note: "",
     longText: "",
+    scheduleType: "schedule",
+    isParsingSchedule: false,
+    isRecognizingVoice: false,
+    isRecordingVoice: false,
+    parseTip: "",
+    missingFields: [],
     pageMode: "create",
     editId: "",
     editDateKey: "",
@@ -258,11 +311,117 @@ Page({
       }, formDataFromSchedule(existing, occurrenceDateKey));
     }
     this.setData(nextData);
+    this.setupRecorder();
+  },
+
+  onUnload() {
+    this.unloaded = true;
+    if (this.data.isRecordingVoice && wx.getRecorderManager) {
+      wx.getRecorderManager().stop();
+    }
   },
 
   updateField(e) {
     const key = e.currentTarget.dataset.key;
     this.setData({ [key]: e.detail.value });
+  },
+
+  setupRecorder() {
+    if (!wx.getRecorderManager || this.recorderReady) return;
+    this.recorderReady = true;
+    const recorder = wx.getRecorderManager();
+    recorder.onStop((res) => {
+      this.handleVoiceStop(res);
+    });
+    recorder.onError((error) => {
+      console.warn("voice record failed", error);
+      this.setData({ isRecordingVoice: false, isRecognizingVoice: false });
+      wx.showToast({ title: "录音失败，请重试", icon: "none" });
+    });
+  },
+
+  getCurrentDateKey() {
+    return toDateKey(new Date());
+  },
+
+  parseLongText() {
+    const text = String(this.data.longText || "").trim();
+    if (!text || this.data.isParsingSchedule) return;
+    this.parseScheduleText(text);
+  },
+
+  parseScheduleText(text) {
+    const content = String(text || "").trim();
+    if (!content) {
+      wx.showToast({ title: "请先输入日程描述", icon: "none" });
+      return Promise.resolve(null);
+    }
+    this.setData({
+      isParsingSchedule: true,
+      parseTip: "正在解析日程...",
+      missingFields: []
+    });
+    return api.schedule.parse({
+      text: content,
+      currentDate: this.getCurrentDateKey()
+    }).then((res) => {
+      const parsed = res && res.data;
+      if (!parsed || typeof parsed !== "object") {
+        throw new Error("empty parsed schedule");
+      }
+      this.applyParsedSchedule(parsed);
+      return parsed;
+    }).catch((error) => {
+      console.warn("schedule parse failed", error);
+      this.setData({ parseTip: "" });
+      wx.showToast({ title: "解析失败，请手动填写或稍后重试", icon: "none" });
+      return null;
+    }).finally(() => {
+      this.setData({ isParsingSchedule: false });
+    });
+  },
+
+  applyParsedSchedule(parsed) {
+    const updates = {};
+    const dateKey = parsed.date || parsed.dateKey;
+    const startTime = parsed.startTime;
+    const endTime = parsed.endTime;
+    if (parsed.title) updates.title = parsed.title;
+    if (parsed.location) updates.location = parsed.location;
+    if (dateKey) {
+      updates.startDateKey = dateKey;
+      updates.endDateKey = dateKey;
+      updates.startDate = formatDateLabel(dateKey);
+      updates.endDate = formatDateLabel(dateKey);
+    }
+    if (startTime) updates.startTime = startTime;
+    if (endTime) {
+      updates.endTime = endTime;
+      updates.hasManualEndTime = true;
+    } else if (dateKey || startTime) {
+      Object.assign(updates, getEndOneHourAfterStart(dateKey || this.data.startDateKey, startTime || this.data.startTime));
+      updates.hasManualEndTime = false;
+    }
+    if (parsed.type) updates.scheduleType = scheduleTypeMap[parsed.type] || "schedule";
+    const repeatValue = parsed.repeat && parsed.repeat.enabled ? normalizeRepeatRule(parsed.repeat.rule) : "never";
+    const repeatOption = findRepeatOption(repeatValue);
+    updates.repeatValue = repeatOption.value;
+    updates.repeatLabel = repeatOption.label;
+    updates.reminder = reminderLabelFromParsed(parsed.reminder);
+
+    const noteParts = [];
+    if (parsed.description) noteParts.push(parsed.description);
+    if (Array.isArray(parsed.participants) && parsed.participants.length) {
+      noteParts.push(`参与人：${parsed.participants.join("、")}`);
+    }
+    if (noteParts.length) updates.note = noteParts.join("\n");
+
+    const missingFields = Array.isArray(parsed.missingFields) ? parsed.missingFields : [];
+    const missingText = formatMissingFields(missingFields);
+    updates.missingFields = missingFields;
+    updates.parseTip = missingText ? `已解析，请补充：${missingText}` : "已解析并填入表单，请确认后保存";
+    this.setData(updates);
+    wx.showToast({ title: missingText ? "请补充缺失信息" : "已填入表单", icon: "none" });
   },
 
   toggleAllDay(e) {
@@ -372,7 +531,7 @@ Page({
       id,
       clientId: id,
       title: this.data.title.trim(),
-      type: "schedule",
+      type: this.data.scheduleType || "schedule",
       date: formatDateLabel(startDateKey),
       dateKey: startDateKey,
       year: dateParts[0],
@@ -393,6 +552,7 @@ Page({
       url: this.data.url.trim(),
       note: this.data.note || this.data.longText,
       allDay: this.data.allDay,
+      source: this.data.longText ? "natural-language" : "manual",
       status: "todo"
     };
   },
@@ -584,6 +744,50 @@ Page({
   },
 
   startVoice() {
-    wx.navigateTo({ url: "/pages/schedule/schedule" });
+    if (this.data.isParsingSchedule || this.data.isRecognizingVoice) return;
+    if (!wx.getRecorderManager) {
+      wx.showToast({ title: "当前环境不支持录音", icon: "none" });
+      return;
+    }
+    const recorder = wx.getRecorderManager();
+    if (this.data.isRecordingVoice) {
+      recorder.stop();
+      this.setData({ isRecordingVoice: false, isRecognizingVoice: true, parseTip: "正在识别语音..." });
+      return;
+    }
+    this.setupRecorder();
+    this.setData({ isRecordingVoice: true, parseTip: "正在录音，再次点击结束" });
+    recorder.start({
+      duration: 60000,
+      sampleRate: 16000,
+      numberOfChannels: 1,
+      encodeBitRate: 48000,
+      format: "mp3"
+    });
+  },
+
+  handleVoiceStop(res) {
+    if (this.unloaded) return;
+    this.setData({ isRecordingVoice: false, isRecognizingVoice: true, parseTip: "正在识别语音..." });
+    this.speechToText(res.tempFilePath).then((text) => {
+      const content = String(text || "").trim();
+      if (!content) {
+        wx.showToast({ title: "未识别到语音内容", icon: "none" });
+        this.setData({ parseTip: "" });
+        return null;
+      }
+      this.setData({ longText: content });
+      return this.parseScheduleText(content);
+    }).catch((error) => {
+      console.warn("speech to text failed", error);
+      this.setData({ parseTip: "" });
+      wx.showToast({ title: "语音识别服务未接入", icon: "none" });
+    }).finally(() => {
+      this.setData({ isRecognizingVoice: false });
+    });
+  },
+
+  speechToText(tempFilePath) {
+    return Promise.reject(new Error(`speechToText service is not configured: ${tempFilePath || ""}`));
   }
 });

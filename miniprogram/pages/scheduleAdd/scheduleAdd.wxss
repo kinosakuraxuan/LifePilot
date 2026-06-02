@@ -253,6 +253,11 @@
   gap: 18rpx;
 }
 
+.long-input-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
 .delete-row {
   display: flex;
   align-items: center;
@@ -275,7 +280,7 @@
 
 .long-input {
   box-sizing: border-box;
-  flex: 1;
+  width: 100%;
   min-height: 104rpx;
   max-height: 160rpx;
   padding: 20rpx 24rpx;
@@ -284,6 +289,14 @@
   color: #111827;
   font-size: 28rpx;
   box-shadow: 0 12rpx 30rpx rgba(15, 23, 42, 0.08);
+}
+
+.parse-tip {
+  display: block;
+  margin: 10rpx 8rpx 0;
+  color: #6b7280;
+  font-size: 24rpx;
+  line-height: 1.35;
 }
 
 .voice-button {
@@ -303,6 +316,11 @@
   background: #ef4444;
   line-height: 1;
   box-shadow: 0 16rpx 32rpx rgba(239, 68, 68, 0.28);
+}
+
+.voice-button.recording {
+  background: #b91c1c;
+  box-shadow: 0 0 0 10rpx rgba(239, 68, 68, 0.14), 0 16rpx 32rpx rgba(239, 68, 68, 0.28);
 }
 
 .mic-stem {

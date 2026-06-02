@@ -93,6 +93,11 @@ const api = {
     listByDate(date) {
       return callCloud("noteService", withAction("listByDate", { date }));
     }
+  },
+  courseOCR: {
+    parseImage(data) {
+      return callCloud("ocrCourseService", data);
+    }
   }
 };
 

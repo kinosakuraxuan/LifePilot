@@ -32,6 +32,7 @@
           class="attachment-item type-{{item.type}}"
           data-id="{{item.id}}"
           catchtap="previewAttachment"
+          catchlongpress="confirmRemoveAttachment"
         >
           <block wx:if="{{item.type === 'image' || item.type === 'photo' || item.type === 'scanText'}}">
             <image class="attachment-thumb" src="{{item.value}}" mode="aspectFill"></image>
@@ -64,10 +65,6 @@
               <text class="attachment-subtitle">{{item.value}}</text>
             </view>
           </block>
-
-          <button class="attachment-remove" data-id="{{item.id}}" catchtap="removeAttachment">
-            <text>×</text>
-          </button>
         </view>
       </view>
 

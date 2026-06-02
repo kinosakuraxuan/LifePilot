@@ -1,4 +1,5 @@
 const cloud = require("wx-server-sdk");
+const https = require("https");
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -15,6 +16,10 @@ function fail(code, message) {
 
 function cleanText(value, maxLength) {
   return String(value || "").trim().slice(0, maxLength);
+}
+
+function readEnv(name) {
+  return process.env[name] || "";
 }
 
 function isDateKey(value) {
@@ -42,6 +47,76 @@ function toDateTime(dateKey, time, allDay) {
 function normalizeType(value) {
   const allowed = ["course", "task", "exam", "meeting", "habit", "personal", "schedule"];
   return allowed.includes(value) ? value : "schedule";
+}
+
+function requestJson(url, options, body) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(url, options, (res) => {
+      let raw = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        raw += chunk;
+      });
+      res.on("end", () => {
+        let payload = null;
+        try {
+          payload = raw ? JSON.parse(raw) : null;
+        } catch (error) {
+          reject(new Error("invalid DeepSeek response"));
+          return;
+        }
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error((payload && payload.error && payload.error.message) || `DeepSeek status ${res.statusCode}`));
+          return;
+        }
+        resolve(payload);
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(20000, () => {
+      req.destroy(new Error("DeepSeek request timeout"));
+    });
+    req.write(JSON.stringify(body));
+    req.end();
+  });
+}
+
+function extractJsonObject(content) {
+  const text = String(content || "").trim();
+  if (!text) throw new Error("empty DeepSeek content");
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) throw error;
+    return JSON.parse(match[0]);
+  }
+}
+
+function normalizeParsedSchedule(parsed) {
+  const allowedTypes = ["meeting", "task", "course", "reminder", "other"];
+  const reminder = parsed.reminder && typeof parsed.reminder === "object" ? parsed.reminder : {};
+  const repeat = parsed.repeat && typeof parsed.repeat === "object" ? parsed.repeat : {};
+  return {
+    title: cleanText(parsed.title, 80),
+    type: allowedTypes.includes(parsed.type) ? parsed.type : "other",
+    date: isDateKey(parsed.date) ? parsed.date : null,
+    startTime: /^\d{2}:\d{2}$/.test(String(parsed.startTime || "")) ? parsed.startTime : null,
+    endTime: /^\d{2}:\d{2}$/.test(String(parsed.endTime || "")) ? parsed.endTime : null,
+    location: cleanText(parsed.location, 120),
+    participants: Array.isArray(parsed.participants) ? parsed.participants.map((item) => cleanText(item, 30)).filter(Boolean) : [],
+    description: cleanText(parsed.description, 1000),
+    reminder: {
+      enabled: !!reminder.enabled,
+      minutesBefore: reminder.minutesBefore === null || reminder.minutesBefore === undefined ? null : Number(reminder.minutesBefore)
+    },
+    repeat: {
+      enabled: !!repeat.enabled,
+      rule: cleanText(repeat.rule, 30)
+    },
+    confidence: Math.max(0, Math.min(1, Number(parsed.confidence || 0))),
+    missingFields: Array.isArray(parsed.missingFields) ? parsed.missingFields.map((item) => cleanText(item, 40)).filter(Boolean) : []
+  };
 }
 
 async function findOwnSchedule(openid, id) {
@@ -380,23 +455,60 @@ async function handleSearch(event, openid) {
 async function handleParse(event) {
   const text = String(event.text || event.voiceText || "").trim().slice(0, 1000);
   if (!text) return fail(400, "text is required");
+  const apiKey = readEnv("DEEPSEEK_API_KEY");
+  if (!apiKey) return fail(500, "DEEPSEEK_API_KEY is not configured");
 
-  const base = event.baseDate ? new Date(event.baseDate) : new Date();
-  const date = new Date(Number.isNaN(base.getTime()) ? Date.now() : base.getTime());
-  if (/tomorrow|\u660e\u5929/i.test(text)) date.setDate(date.getDate() + 1);
+  const currentDate = isDateKey(event.currentDate) ? event.currentDate : toDateKey(new Date());
+  const systemPrompt = "你是一个日程解析助手。你的任务是把用户输入的一句话日程描述解析成标准 JSON。你只能返回 JSON，不能返回 Markdown、解释文字或多余内容。如果字段无法确定，请填 null、空字符串或空数组，并在 missingFields 中说明。日期必须转换为 YYYY-MM-DD，时间必须转换为 HH:mm。请基于当前日期解析“今天、明天、后天、下周一、下个月”等相对时间。不要编造用户没有提供或无法合理推断的信息。";
+  const userPrompt = `当前日期：${currentDate}
+用户输入：${text}
 
-  const startTime = /3(:00)?\s*pm|15:00|\u4e09\u70b9|3\u70b9/i.test(text) ? "15:00" : "19:00";
-  return success({
-    title: text.slice(0, 30) || "New schedule",
-    location: "",
-    dateKey: toDateKey(date),
-    startTime,
-    endTime: startTime === "15:00" ? "16:00" : "20:00",
-    reminder: /30|half|\u534a\u5c0f\u65f6/i.test(text) ? "30 min before" : "None",
-    type: /exam|\u8003\u8bd5/i.test(text) ? "exam" : "schedule",
-    priority: "medium",
-    sourceText: text
-  });
+请返回以下 JSON 格式：
+
+{
+  "title": "",
+  "type": "meeting | task | course | reminder | other",
+  "date": "",
+  "startTime": "",
+  "endTime": "",
+  "location": "",
+  "participants": [],
+  "description": "",
+  "reminder": {
+    "enabled": false,
+    "minutesBefore": null
+  },
+  "repeat": {
+    "enabled": false,
+    "rule": ""
+  },
+  "confidence": 0,
+  "missingFields": []
+}`;
+
+  try {
+    const response = await requestJson("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      }
+    }, {
+      model: event.model || "deepseek-chat",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      temperature: 0,
+      response_format: { type: "json_object" }
+    });
+    const content = response && response.choices && response.choices[0] && response.choices[0].message && response.choices[0].message.content;
+    const parsed = normalizeParsedSchedule(extractJsonObject(content));
+    return success(parsed);
+  } catch (error) {
+    console.error("DeepSeek schedule parse failed", error);
+    return fail(500, "解析失败，请手动填写或稍后重试");
+  }
 }
 
 exports.main = async (event) => {

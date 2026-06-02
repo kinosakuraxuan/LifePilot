@@ -382,8 +382,27 @@ Page({
     audio.play();
   },
 
-  removeAttachment(e) {
+  confirmRemoveAttachment(e) {
     const id = e.currentTarget.dataset.id;
+    const item = this.data.editingNoteAttachments.find((attachment) => attachment.id === id);
+    if (!item) return;
+    wx.showModal({
+      title: "删除附件",
+      content: `是否删除“${item.title || "附件"}”？`,
+      confirmText: "删除",
+      cancelText: "取消",
+      confirmColor: "#ef4444",
+      success: (res) => {
+        if (res.confirm) this.removeAttachmentById(id);
+      }
+    });
+  },
+
+  removeAttachment(e) {
+    this.removeAttachmentById(e.currentTarget.dataset.id);
+  },
+
+  removeAttachmentById(id) {
     const attachments = this.data.editingNoteAttachments.filter((item) => item.id !== id);
     this.setData({
       editingNoteAttachments: attachments,

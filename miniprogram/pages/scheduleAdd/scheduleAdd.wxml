@@ -80,8 +80,11 @@
   </scroll-view>
 
   <view wx:if="{{pageMode !== 'edit'}}" class="bottom-input">
-    <textarea class="long-input" placeholder="粘贴会议、任务或课程要求" value="{{longText}}" data-key="longText" bindinput="updateField"></textarea>
-    <button class="voice-button" bindtap="startVoice" aria-label="智能录入">
+    <view class="long-input-wrap">
+      <textarea class="long-input" placeholder="粘贴会议、任务或课程要求" value="{{longText}}" data-key="longText" disabled="{{isParsingSchedule || isRecognizingVoice}}" bindinput="updateField" bindblur="parseLongText"></textarea>
+      <text class="parse-tip" wx:if="{{parseTip}}">{{parseTip}}</text>
+    </view>
+    <button class="voice-button {{isRecordingVoice ? 'recording' : ''}}" loading="{{isRecognizingVoice}}" disabled="{{isParsingSchedule || isRecognizingVoice}}" bindtap="startVoice" aria-label="智能录入">
       <view class="mic-stem"></view>
       <view class="mic-base"></view>
     </button>

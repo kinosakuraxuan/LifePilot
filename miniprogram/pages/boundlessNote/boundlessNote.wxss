@@ -173,7 +173,7 @@ page {
   align-items: center;
   gap: 16rpx;
   min-height: 88rpx;
-  padding: 14rpx 74rpx 14rpx 18rpx;
+  padding: 14rpx 18rpx;
   overflow: hidden;
   border-radius: 20rpx;
   background: #f7f6f1;
@@ -217,28 +217,6 @@ page {
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.attachment-remove {
-  position: absolute;
-  right: 14rpx;
-  top: 50%;
-  width: 48rpx;
-  height: 48rpx;
-  min-width: 48rpx;
-  min-height: 48rpx;
-  margin: -24rpx 0 0;
-  padding: 0;
-  border-radius: 50%;
-  background: #ffffff;
-  color: #ef4444;
-  font-size: 32rpx;
-  font-weight: 700;
-  line-height: 48rpx;
-}
-
-.attachment-remove::after {
-  border: 0;
 }
 
 .attachment-mask {
