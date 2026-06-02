@@ -25,24 +25,34 @@
         maxlength="-1"
       ></textarea>
 
-      <view class="attachment-list" wx:if="{{editingNoteAttachments.length}}">
+      <view class="image-attachments" wx:if="{{imageAttachments.length}}">
+        <text class="attachment-section-title">图片</text>
+        <view class="image-grid">
+          <image
+            wx:for="{{imageAttachments}}"
+            wx:key="id"
+            class="image-thumb"
+            src="{{item.src}}"
+            mode="aspectFill"
+            data-id="{{item.id}}"
+            data-src="{{item.src}}"
+            data-index="{{index}}"
+            bindtap="previewAttachmentImage"
+            bindlongpress="confirmRemoveAttachment"
+          ></image>
+        </view>
+      </view>
+
+      <view class="attachment-list" wx:if="{{otherAttachments.length}}">
         <view
-          wx:for="{{editingNoteAttachments}}"
+          wx:for="{{otherAttachments}}"
           wx:key="id"
           class="attachment-item type-{{item.type}}"
           data-id="{{item.id}}"
           catchtap="previewAttachment"
           catchlongpress="confirmRemoveAttachment"
         >
-          <block wx:if="{{item.type === 'image' || item.type === 'photo' || item.type === 'scanText'}}">
-            <image class="attachment-thumb" src="{{item.value}}" mode="aspectFill"></image>
-            <view class="attachment-info">
-              <text class="attachment-title">{{item.title}}</text>
-              <text class="attachment-subtitle" wx:if="{{item.type === 'scanText'}}">待识别</text>
-            </view>
-          </block>
-
-          <block wx:elif="{{item.type === 'location'}}">
+          <block wx:if="{{item.type === 'location'}}">
             <view class="attachment-kind-dot"></view>
             <view class="attachment-info">
               <text class="attachment-title">{{item.title}}</text>
@@ -55,6 +65,14 @@
             <view class="attachment-info">
               <text class="attachment-title">{{playingAudioId === item.id ? '正在播放' : item.title}}</text>
               <text class="attachment-subtitle">点击播放 / 暂停</text>
+            </view>
+          </block>
+
+          <block wx:elif="{{item.type === 'scanText'}}">
+            <view class="attachment-kind-dot"></view>
+            <view class="attachment-info">
+              <text class="attachment-title">{{item.title}}</text>
+              <text class="attachment-subtitle scan-text-preview">{{item.value}}</text>
             </view>
           </block>
 

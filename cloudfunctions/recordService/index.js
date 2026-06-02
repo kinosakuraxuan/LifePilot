@@ -151,6 +151,7 @@ async function handleCreatePomodoro(event, openid) {
     data: {
       openid,
       userId: openid,
+      clientId: String(event.clientId || "").slice(0, 80),
       scheduleId: schedule ? schedule._id : "",
       category,
       durationMinutes,
@@ -178,6 +179,31 @@ async function handleCreatePomodoro(event, openid) {
   }
 
   return success({ id: res._id });
+}
+
+async function findOwnPomodoro(openid, id, clientId) {
+  const target = String(id || clientId || "");
+  if (!target) return null;
+  const byDoc = await db.collection("pomodoroSessions").doc(target).get().catch(() => null);
+  if (byDoc && byDoc.data && byDoc.data.openid === openid) return byDoc.data;
+  const byClient = await db.collection("pomodoroSessions")
+    .where({ openid, clientId: target })
+    .limit(1)
+    .get();
+  return byClient.data[0] || null;
+}
+
+async function handleDeletePomodoro(event, openid) {
+  const session = await findOwnPomodoro(openid, event.id, event.clientId);
+  if (!session || !session._id) return fail(404, "pomodoro not found");
+  await db.collection("pomodoroSessions").doc(session._id).update({
+    data: {
+      isDeleted: true,
+      deletedAt: db.serverDate(),
+      updatedAt: db.serverDate()
+    }
+  });
+  return success({ id: session._id, deleted: true });
 }
 
 function buildScores(stats, goals) {
@@ -336,6 +362,8 @@ exports.main = async (event) => {
         return await handleCreateRecord(event, openid);
       case "createPomodoro":
         return await handleCreatePomodoro(event, openid);
+      case "deletePomodoro":
+        return await handleDeletePomodoro(event, openid);
       case "getOverview":
         return await handleGetOverview(event, openid);
       case "getWeeklyReport":

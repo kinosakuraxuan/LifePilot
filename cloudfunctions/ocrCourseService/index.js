@@ -95,6 +95,14 @@ function extractOcrText(result) {
   return "";
 }
 
+function normalizeOcrLines(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
 async function callTencentOCR(imageBase64, mode) {
   const action = OCR_ACTIONS[mode] || OCR_ACTIONS.accurate;
   const OcrClient = tencentcloud.ocr.v20181119.Client;
@@ -197,11 +205,12 @@ function normalizeCourse(course, currentYear) {
 
 exports.main = async (event) => {
   const fileID = event && event.fileID;
+  const action = event && event.action;
   const mode = event && event.mode ? event.mode : "accurate";
   const currentYear = Number((event && event.currentYear) || new Date().getFullYear());
 
-  if (!TENCENT_SECRET_ID || !TENCENT_SECRET_KEY || !DEEPSEEK_API_KEY) {
-    return fail(500, "OCR 或 DeepSeek API Key 未配置");
+  if (!TENCENT_SECRET_ID || !TENCENT_SECRET_KEY) {
+    return fail(500, "OCR API Key 未配置");
   }
   if (!fileID) return fail(400, "fileID is required");
 
@@ -211,6 +220,18 @@ exports.main = async (event) => {
     const ocrResult = await callTencentOCR(imageBase64, mode);
     const ocrText = extractOcrText(ocrResult);
     if (!ocrText) return fail(500, "OCR 未识别到文字");
+
+    if (action === "recognizeText") {
+      return success({
+        text: normalizeOcrLines(ocrText),
+        fileID,
+        warnings: []
+      });
+    }
+
+    if (!DEEPSEEK_API_KEY) {
+      return fail(500, "DeepSeek API Key 未配置");
+    }
 
     const parsed = await callDeepSeek(ocrText, currentYear);
     const courses = ((parsed && parsed.courses) || []).map((item) => normalizeCourse(item, currentYear));

@@ -76,6 +76,7 @@
       <view wx:if="{{pageMode === 'edit'}}" class="form-card delete-row" bindtap="deleteCurrentSchedule">
         <text class="delete-row-text">删除日程</text>
       </view>
+      <view wx:if="{{pageMode === 'edit'}}" class="edit-bottom-spacer"></view>
     </view>
   </scroll-view>
 

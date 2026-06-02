@@ -2,6 +2,7 @@
   position: relative;
   box-sizing: border-box;
   height: 100vh;
+  padding: 0;
   overflow: hidden;
   background: #f8fafc;
   color: #111827;
@@ -10,7 +11,7 @@
 .mine-scroll {
   height: 100vh;
   box-sizing: border-box;
-  padding: calc(24rpx + env(safe-area-inset-top)) 28rpx calc(34rpx + env(safe-area-inset-bottom));
+  padding: calc(8rpx + env(safe-area-inset-top)) 28rpx 0;
 }
 
 .section {
@@ -246,6 +247,10 @@
   color: #ef4444;
   font-size: 24rpx;
   line-height: 58rpx;
+}
+
+.mine-bottom-spacer {
+  height: calc(180rpx + env(safe-area-inset-bottom));
 }
 
 .course-mask {

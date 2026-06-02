@@ -1,5 +1,6 @@
 const { api } = require("../../utils/cloud");
 const { getSafeAreaLayout } = require("../../utils/safeArea");
+const { KEYS, appendItem } = require("../../utils/storage");
 
 const THEMES = {
   study: { hint: "保持一段完整的专注时间。", cls: "theme-study" },
@@ -93,13 +94,38 @@ Page({
     this.ending = true;
     this.stopTick();
     const durationMinutes = Math.max(1, Math.round((Date.now() - this.startedAt) / 60000));
-    api.record.createPomodoro({
+    const now = new Date();
+    const id = `pomodoro-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const localRecord = {
+      id,
+      clientId: id,
+      source: "pomodoro",
+      module: this.data.category,
       category: this.data.category,
+      title: this.data.title,
+      date: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
       durationMinutes,
       startedAt: new Date(this.startedAt).toISOString(),
-      endedAt: new Date().toISOString(),
+      endedAt: now.toISOString(),
       completed: true,
       exitReason: "ended_by_user"
+    };
+    appendItem(KEYS.records, localRecord);
+    api.record.createPomodoro({
+      clientId: id,
+      category: this.data.category,
+      durationMinutes,
+      startedAt: localRecord.startedAt,
+      endedAt: localRecord.endedAt,
+      completed: true,
+      exitReason: "ended_by_user"
+    }).then((res) => {
+      const cloudId = res && res.data && res.data.id;
+      if (!cloudId) return;
+      const records = wx.getStorageSync(KEYS.records) || [];
+      wx.setStorageSync(KEYS.records, records.map((item) => (
+        item.id === id ? Object.assign({}, item, { cloudId }) : item
+      )));
     }).catch((error) => {
       console.warn("recordService createPomodoro pending local only", error.message);
     });

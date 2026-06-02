@@ -1,69 +1,38 @@
-<view class="page">
-  <view class="section">
-    <view class="section-title">日程解析</view>
-    <view class="card stack">
-      <input class="input" value="{{voiceText}}" placeholder="粘贴或输入一句日程描述" bindinput="onVoiceInput" />
-      <button class="primary-button" bindtap="parseVoice">解析日程</button>
-    </view>
+<view class="schedule-page">
+  <view class="schedule-head">
+    <button class="back-button" bindtap="goBack"><text>‹</text></button>
+    <text class="page-title">全部日程</text>
   </view>
 
-  <view class="section" wx:if="{{parsedCard}}">
-    <view class="section-title">确认日程</view>
-    <view class="card stack confirm-card">
-      <view class="row">
-        <text class="field">标题</text>
-        <text>{{parsedCard.title}}</text>
-      </view>
-      <view class="row">
-        <text class="field">时间</text>
-        <text>{{parsedCard.date}} {{parsedCard.startTime}}</text>
-      </view>
-      <view class="row">
-        <text class="field">提醒</text>
-        <text>{{parsedCard.remindAt}}</text>
-      </view>
-      <button class="primary-button" bindtap="confirmParsed">添加日程</button>
+  <scroll-view class="schedule-scroll" type="list" scroll-y="true">
+    <view wx:if="{{loading}}" class="state-card">
+      <text>加载中...</text>
     </view>
-  </view>
 
-  <view class="section">
-    <view class="section-title">
-      <text>课程</text>
-    </view>
-    <view class="stack">
-      <view class="card" wx:for="{{courses}}" wx:key="id">
-        <view class="row">
-          <view>
-            <view class="item-title">{{item.name}}</view>
-            <view class="muted">{{item.teacher}} - {{item.location}}</view>
-          </view>
-          <view class="pill">{{item.startTime}}</view>
+    <block wx:elif="{{items.length}}">
+      <view
+        class="schedule-card"
+        wx:for="{{items}}"
+        wx:key="id"
+        data-id="{{item.id}}"
+        data-date="{{item.dateKey || item.startDateKey || item.occurrenceDateKey}}"
+        data-source="{{item.sourceKey}}"
+        bindtouchstart="onItemTouchStart"
+        bindtouchend="onItemTouchEnd"
+        bindlongpress="editSchedule"
+      >
+        <view class="card-main">
+          <text class="schedule-title" overflow="ellipsis" max-lines="1">{{item.title}}</text>
+          <text class="schedule-meta">{{item.dateLabel}} {{item.timeText}}</text>
+          <text class="schedule-location" overflow="ellipsis" max-lines="1">{{item.metaText}}</text>
         </view>
       </view>
-      <view class="card" wx:if="{{courses.length === 0}}">
-        <text class="muted">还没有课程。</text>
-      </view>
-    </view>
-  </view>
+    </block>
 
-  <view class="section">
-    <view class="section-title">日程</view>
-    <view class="stack">
-      <view class="card" wx:for="{{schedules}}" wx:key="id">
-        <view class="row">
-          <view>
-            <view class="item-title">{{item.title}}</view>
-            <view class="muted">{{item.date}} {{item.startTime}} - {{item.endTime}}</view>
-          </view>
-          <view class="schedule-actions">
-            <view class="pill">{{item.type}}</view>
-            <button class="delete-button" data-id="{{item.id}}" bindtap="deleteSchedule">删</button>
-          </view>
-        </view>
-      </view>
-      <view class="card" wx:if="{{schedules.length === 0}}">
-        <text class="muted">还没有日程。</text>
-      </view>
+    <view wx:else class="state-card">
+      <text>暂无日程</text>
     </view>
-  </view>
+
+    <view class="bottom-spacer"></view>
+  </scroll-view>
 </view>

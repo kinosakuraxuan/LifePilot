@@ -74,6 +74,46 @@ function createAttachment(type, title, value, meta) {
   });
 }
 
+function attachmentSource(item) {
+  return item && (item.url || item.path || item.fileID || item.src || item.value || "");
+}
+
+function isImageAttachment(item) {
+  const type = item && item.type;
+  const title = String((item && (item.title || item.label)) || "");
+  const src = attachmentSource(item);
+  return ["image", "photo", "camera"].includes(type)
+    || (!type && title.includes("图片"))
+    || (!type && /\.(png|jpe?g|gif|webp|bmp)$/i.test(src));
+}
+
+function normalizeImageAttachment(item) {
+  const normalized = normalizeAttachment(item);
+  const src = attachmentSource(normalized);
+  return Object.assign({}, normalized, {
+    src,
+    fileID: normalized.fileID || normalized.value || "",
+    title: normalized.title || "图片"
+  });
+}
+
+function buildAttachmentView(items) {
+  const imageAttachments = [];
+  const otherAttachments = [];
+  (items || []).map(normalizeAttachment).forEach((item) => {
+    if (isImageAttachment(item)) {
+      imageAttachments.push(normalizeImageAttachment(item));
+    } else {
+      otherAttachments.push(item);
+    }
+  });
+  return {
+    imageAttachments,
+    otherAttachments,
+    previewImageUrls: imageAttachments.map((item) => item.src).filter(Boolean)
+  };
+}
+
 function attachmentSignature(items) {
   return JSON.stringify((items || []).map((item) => normalizeAttachment(item)));
 }
@@ -96,10 +136,14 @@ Page({
     editingNoteDateText: displayDate(todayKey()),
     editingNoteContent: "",
     editingNoteAttachments: [],
+    imageAttachments: [],
+    otherAttachments: [],
+    previewImageUrls: [],
     noteSavedContent: "",
     noteSavedAttachments: [],
     noteDirty: false,
     attachmentPanelOpen: false,
+    recognizingText: false,
     recording: false,
     playingAudioId: "",
     attachmentOptions: [
@@ -146,7 +190,7 @@ Page({
     const date = normalizeDate(note.date || note.dateKey || todayKey());
     const content = note.content || note.text || note.note || "";
     const attachments = (note.attachments || note.assets || []).map(normalizeAttachment);
-    this.setData({
+    this.setData(Object.assign({
       pageMode: mode,
       editingNoteId: note.id || note.clientId || "",
       editingNoteDate: date,
@@ -157,9 +201,10 @@ Page({
       noteSavedAttachments: attachments,
       noteDirty: false,
       attachmentPanelOpen: false,
+      recognizingText: false,
       recording: false,
       playingAudioId: ""
-    });
+    }, buildAttachmentView(attachments)));
   },
 
   updateNoteContent(e) {
@@ -308,15 +353,7 @@ Page({
   scanText() {
     const addScan = (path) => {
       if (!path) return;
-      this.addAttachments([createAttachment("scanText", "扫描文本", path, { pending: true })]);
-      const nextContent = this.data.editingNoteContent
-        ? `${this.data.editingNoteContent}\n[扫描文本待识别]`
-        : "[扫描文本待识别]";
-      this.setData({
-        editingNoteContent: nextContent,
-        noteDirty: true
-      });
-      wx.showToast({ title: "已添加扫描文本", icon: "success" });
+      this.recognizeTextFromImage(path);
     };
 
     if (wx.chooseMedia) {
@@ -336,11 +373,93 @@ Page({
     });
   },
 
-  addAttachments(items) {
+  async recognizeTextFromImage(path) {
+    if (this.data.recognizingText) return;
+    this.setData({ recognizingText: true });
+    wx.showLoading({ title: "识别文字中..." });
+    try {
+      const fileID = await this.uploadAttachmentFile(path, "scan-text");
+      const result = await api.courseOCR.parseImage({
+        action: "recognizeText",
+        fileID,
+        mode: "accurate"
+      });
+      const data = result && result.data ? result.data : {};
+      const text = String(data.text || data.ocrText || "").trim();
+      if (!text) {
+        wx.showToast({ title: "未识别到文字", icon: "none" });
+        return;
+      }
+      const separator = this.data.editingNoteContent.trim() ? "\n" : "";
+      const nextContent = `${this.data.editingNoteContent}${separator}${text}`;
+      const attachment = createAttachment("scanText", "扫描文本", text, {
+        fileID,
+        imagePath: path,
+        recognizedText: text,
+        warnings: data.warnings || []
+      });
+      this.addAttachments([attachment], {
+        editingNoteContent: nextContent
+      });
+      wx.showToast({ title: "已识别文本", icon: "success" });
+    } catch (error) {
+      console.warn("scan text OCR failed", error);
+      wx.showToast({ title: "识别失败，请稍后重试", icon: "none" });
+    } finally {
+      wx.hideLoading();
+      this.setData({ recognizingText: false });
+    }
+  },
+
+  uploadAttachmentFile(path, prefix) {
+    if (!wx.cloud || !wx.cloud.uploadFile) {
+      return Promise.reject(new Error("cloud upload is not available"));
+    }
+    const ext = String(path || "").split("?")[0].split(".").pop() || "jpg";
+    return wx.cloud.uploadFile({
+      cloudPath: `boundless/${prefix || "attachment"}/${Date.now()}-${Math.floor(Math.random() * 1000)}.${ext}`,
+      filePath: path
+    }).then((res) => res.fileID);
+  },
+
+  addAttachments(items, extraUpdates) {
     const attachments = this.data.editingNoteAttachments.concat((items || []).map(normalizeAttachment));
-    this.setData({
+    this.setData(Object.assign({
       editingNoteAttachments: attachments,
       noteDirty: true
+    }, buildAttachmentView(attachments), extraUpdates || {}));
+  },
+
+  async resolvePreviewImageUrls(urls) {
+    const list = (urls || []).filter(Boolean);
+    const cloudUrls = list.filter((url) => String(url).indexOf("cloud://") === 0);
+    if (!cloudUrls.length || !wx.cloud || !wx.cloud.getTempFileURL) return list;
+    try {
+      const res = await wx.cloud.getTempFileURL({
+        fileList: cloudUrls.map((fileID) => ({ fileID }))
+      });
+      const tempMap = {};
+      (res.fileList || []).forEach((item) => {
+        if (item.fileID && item.tempFileURL) tempMap[item.fileID] = item.tempFileURL;
+      });
+      return list.map((url) => tempMap[url] || url);
+    } catch (error) {
+      console.warn("resolve preview image urls failed", error);
+      return list;
+    }
+  },
+
+  async previewAttachmentImage(e) {
+    const src = e.currentTarget.dataset.src || "";
+    const index = Number(e.currentTarget.dataset.index || 0);
+    const rawUrls = this.data.previewImageUrls || [];
+    const urls = await this.resolvePreviewImageUrls(rawUrls);
+    if (!urls.length) return;
+    const rawIndex = rawUrls.indexOf(src);
+    const current = rawIndex >= 0 ? urls[rawIndex] : (urls[index] || urls[0]);
+    wx.previewImage({
+      current,
+      urls
     });
   },
 
@@ -348,14 +467,6 @@ Page({
     const id = e.currentTarget.dataset.id;
     const item = this.data.editingNoteAttachments.find((attachment) => attachment.id === id);
     if (!item) return;
-    if (item.type === "image" || item.type === "photo" || item.type === "scanText") {
-      const urls = this.data.editingNoteAttachments
-        .filter((attachment) => attachment.type === "image" || attachment.type === "photo" || attachment.type === "scanText")
-        .map((attachment) => attachment.value)
-        .filter(Boolean);
-      if (item.value) wx.previewImage({ current: item.value, urls });
-      return;
-    }
     if (item.type === "audio") this.playAudio(item);
   },
 
@@ -404,10 +515,10 @@ Page({
 
   removeAttachmentById(id) {
     const attachments = this.data.editingNoteAttachments.filter((item) => item.id !== id);
-    this.setData({
+    this.setData(Object.assign({
       editingNoteAttachments: attachments,
       noteDirty: true
-    });
+    }, buildAttachmentView(attachments)));
     wx.showToast({ title: "已移除附件", icon: "success" });
   },
 

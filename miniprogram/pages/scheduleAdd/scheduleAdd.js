@@ -1,6 +1,11 @@
-const { KEYS, appendItem, getItemById, removeItem, updateItem, readList, writeList } = require("../../utils/storage");
+﻿const { KEYS, appendItem, getItemById, removeItem, updateItem, readList, writeList } = require("../../utils/storage");
 const { api } = require("../../utils/cloud");
 const { getSafeAreaLayout } = require("../../utils/safeArea");
+const {
+  withNormalizedReminder,
+  requestScheduleReminderSubscription,
+  reminderLabel
+} = require("../../utils/reminder");
 
 function pad(value) {
   return value < 10 ? `0${value}` : `${value}`;
@@ -197,7 +202,7 @@ function formDataFromSchedule(schedule, occurrenceDateKey) {
     repeatLabel: repeatOption.label,
     repeatEndDateKey,
     repeatEndDate: formatDateLabel(repeatEndDateKey),
-    reminder: schedule.reminder || schedule.remindAt || "不提醒",
+    reminder: reminderLabel(schedule.reminder || schedule.remindAt || "不提醒"),
     url: schedule.url || "",
     note: schedule.note || "",
     longText: schedule.longText || ""
@@ -258,8 +263,8 @@ Page({
     originalEndDateKey: "",
     isEditingOccurrence: false,
     originalSchedule: null,
-    pageTitle: "新增日程",
-    actionText: "添加",
+    pageTitle: "鏂板鏃ョ▼",
+    actionText: "娣诲姞",
     topBarStyle: "",
     leftActionStyle: "",
     rightActionStyle: ""
@@ -306,8 +311,8 @@ Page({
         originalEndDateKey,
         isEditingOccurrence: occurrenceDateKey !== originalStartDateKey,
         originalSchedule: existing,
-        pageTitle: "编辑日程",
-        actionText: "完成"
+        pageTitle: "缂栬緫鏃ョ▼",
+        actionText: "瀹屾垚"
       }, formDataFromSchedule(existing, occurrenceDateKey));
     }
     this.setData(nextData);
@@ -336,7 +341,7 @@ Page({
     recorder.onError((error) => {
       console.warn("voice record failed", error);
       this.setData({ isRecordingVoice: false, isRecognizingVoice: false });
-      wx.showToast({ title: "录音失败，请重试", icon: "none" });
+      wx.showToast({ title: "褰曢煶澶辫触锛岃閲嶈瘯", icon: "none" });
     });
   },
 
@@ -353,12 +358,12 @@ Page({
   parseScheduleText(text) {
     const content = String(text || "").trim();
     if (!content) {
-      wx.showToast({ title: "请先输入日程描述", icon: "none" });
+      wx.showToast({ title: "璇峰厛杈撳叆鏃ョ▼鎻忚堪", icon: "none" });
       return Promise.resolve(null);
     }
     this.setData({
       isParsingSchedule: true,
-      parseTip: "正在解析日程...",
+      parseTip: "姝ｅ湪瑙ｆ瀽鏃ョ▼...",
       missingFields: []
     });
     return api.schedule.parse({
@@ -419,7 +424,7 @@ Page({
     const missingFields = Array.isArray(parsed.missingFields) ? parsed.missingFields : [];
     const missingText = formatMissingFields(missingFields);
     updates.missingFields = missingFields;
-    updates.parseTip = missingText ? `已解析，请补充：${missingText}` : "已解析并填入表单，请确认后保存";
+    updates.parseTip = missingText ? `已解析，请补全：${missingText}` : "已解析并填入表单，请确认后保存";
     this.setData(updates);
     wx.showToast({ title: missingText ? "请补充缺失信息" : "已填入表单", icon: "none" });
   },
@@ -516,7 +521,7 @@ Page({
     const option = repeatOptions[Number(e.detail.value)] || repeatOptions[0];
     this.setData({
       repeatValue: option.value,
-      repeatLabel: repeatLabels[option.value] || "永不重复"
+      repeatLabel: repeatLabels[option.value] || "姘镐笉閲嶅"
     });
   },
 
@@ -527,7 +532,7 @@ Page({
   buildSchedulePatch(id) {
     const startDateKey = this.data.startDateKey;
     const dateParts = startDateKey.split("-").map(Number);
-    return {
+    const patch = {
       id,
       clientId: id,
       title: this.data.title.trim(),
@@ -555,6 +560,7 @@ Page({
       source: this.data.longText ? "natural-language" : "manual",
       status: "todo"
     };
+    return withNormalizedReminder(patch);
   },
 
   validateForm() {
@@ -564,7 +570,7 @@ Page({
     }
     if (!this.data.allDay) {
       if (!this.data.startDateKey || !this.data.startTime || !this.data.endDateKey || !this.data.endTime) {
-        wx.showToast({ title: "请完善开始和结束时间", icon: "none" });
+        wx.showToast({ title: "璇峰畬鍠勫紑濮嬪拰缁撴潫鏃堕棿", icon: "none" });
         return false;
       }
       if (!isEndAfterStart(this.data.startDateKey, this.data.startTime, this.data.startDateKey, this.data.endTime)) {
@@ -588,6 +594,27 @@ Page({
     }, 450);
   },
 
+  prepareReminderForSave(schedule) {
+    const normalized = withNormalizedReminder(schedule);
+    if (!normalized.reminder || !normalized.reminder.enabled) {
+      return Promise.resolve(normalized);
+    }
+    return requestScheduleReminderSubscription(normalized).then((subscription) => {
+      const prepared = withNormalizedReminder(normalized, {
+        subscribed: !!subscription.subscribed,
+        templateId: subscription.templateId || ""
+      });
+      if (subscription.subscribed) {
+        wx.showToast({ title: "提醒已开启", icon: "none" });
+      } else if (subscription.missingTemplate) {
+        wx.showToast({ title: "已保存日程，但未配置微信提醒", icon: "none" });
+      } else {
+        wx.showToast({ title: "已保存日程，但不会收到微信提醒", icon: "none" });
+      }
+      return prepared;
+    });
+  },
+
   saveSchedule() {
     if (!this.validateForm()) return;
     if (this.data.pageMode === "edit" && this.data.editId) {
@@ -596,11 +623,13 @@ Page({
     }
     const id = createId("s");
     const schedule = this.buildSchedulePatch(id);
-    appendItem(KEYS.schedules, schedule);
-    api.schedule.create(schedule).catch((error) => {
-      console.warn("schedule create pending local only", error.message);
+    this.prepareReminderForSave(schedule).then((prepared) => {
+      appendItem(KEYS.schedules, prepared);
+      api.schedule.create(prepared).catch((error) => {
+        console.warn("schedule create pending local only", error.message);
+      });
+      this.finishSave("已添加");
     });
-    this.finishSave("已添加");
   },
 
   saveEditedSchedule() {
@@ -615,11 +644,13 @@ Page({
     const storageId = original.id || original.clientId || id;
     const patch = this.buildSchedulePatch(storageId);
     if (!isRepeating) {
-      const updated = updateItem(KEYS.schedules, id, patch);
-      api.schedule.update(Object.assign({}, updated || patch, { id })).catch((error) => {
-        console.warn("schedule update pending local only", error.message);
+      this.prepareReminderForSave(patch).then((prepared) => {
+        const updated = updateItem(KEYS.schedules, id, prepared);
+        api.schedule.update(Object.assign({}, updated || prepared, { id })).catch((error) => {
+          console.warn("schedule update pending local only", error.message);
+        });
+        this.finishSave("已保存");
       });
-      this.finishSave("已保存");
       return;
     }
     wx.showActionSheet({
@@ -648,11 +679,13 @@ Page({
     } : {}, {
       excludedDates: Array.isArray(original.excludedDates) ? original.excludedDates.slice() : []
     });
-    const updated = updateItem(KEYS.schedules, id, nextPatch);
-    api.schedule.update(Object.assign({}, updated || nextPatch, { id })).catch((error) => {
-      console.warn("schedule update pending local only", error.message);
+    this.prepareReminderForSave(nextPatch).then((prepared) => {
+      const updated = updateItem(KEYS.schedules, id, prepared);
+      api.schedule.update(Object.assign({}, updated || prepared, { id })).catch((error) => {
+        console.warn("schedule update pending local only", error.message);
+      });
+      this.finishSave("已保存");
     });
-    this.finishSave("已保存全部重复日程");
   },
 
   saveSingleOccurrence(original, patch) {
@@ -666,15 +699,17 @@ Page({
     const single = Object.assign({}, patch, {
       id: newId,
       clientId: newId,
-      repeat: "永不重复",
+      repeat: "姘镐笉閲嶅",
       repeatRule: { type: "never", interval: 1, endDate: "" },
       excludedDates: []
     });
-    appendItem(KEYS.schedules, single);
-    api.schedule.create(single).catch((error) => {
-      console.warn("schedule create occurrence pending local only", error.message);
+    this.prepareReminderForSave(single).then((prepared) => {
+      appendItem(KEYS.schedules, prepared);
+      api.schedule.create(prepared).catch((error) => {
+        console.warn("schedule create occurrence pending local only", error.message);
+      });
+      this.finishSave("已保存");
     });
-    this.finishSave("已修改当天日程");
   },
 
   navigateBackAfterDelete() {
@@ -752,7 +787,7 @@ Page({
     const recorder = wx.getRecorderManager();
     if (this.data.isRecordingVoice) {
       recorder.stop();
-      this.setData({ isRecordingVoice: false, isRecognizingVoice: true, parseTip: "正在识别语音..." });
+      this.setData({ isRecordingVoice: false, isRecognizingVoice: true, parseTip: "姝ｅ湪璇嗗埆璇煶..." });
       return;
     }
     this.setupRecorder();
@@ -768,11 +803,11 @@ Page({
 
   handleVoiceStop(res) {
     if (this.unloaded) return;
-    this.setData({ isRecordingVoice: false, isRecognizingVoice: true, parseTip: "正在识别语音..." });
+    this.setData({ isRecordingVoice: false, isRecognizingVoice: true, parseTip: "姝ｅ湪璇嗗埆璇煶..." });
     this.speechToText(res.tempFilePath).then((text) => {
       const content = String(text || "").trim();
       if (!content) {
-        wx.showToast({ title: "未识别到语音内容", icon: "none" });
+        wx.showToast({ title: "鏈瘑鍒埌璇煶鍐呭", icon: "none" });
         this.setData({ parseTip: "" });
         return null;
       }

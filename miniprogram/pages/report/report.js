@@ -1,120 +1,120 @@
-const { KEYS, readList } = require("../../utils/storage");
 const { api } = require("../../utils/cloud");
+const { buildWeeklyReportData, buildFallback } = require("../../utils/weeklyReportData");
 
-function sum(list, key) {
-  return list.reduce((total, item) => total + Number(item[key] || 0), 0);
+function formatMinutes(value) {
+  const minutes = Math.max(0, Math.round(Number(value || 0)));
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return rest ? `${hours}h ${rest}min` : `${hours}h`;
+  }
+  return `${minutes}min`;
 }
 
-function percent(value, target) {
-  if (!target) return 0;
-  return Math.min(100, Math.round((value / target) * 100));
+function metricCards(input) {
+  const stats = input.stats || {};
+  return [
+    { label: "总时长", value: formatMinutes(stats.totalMinutes) },
+    { label: "番茄钟", value: formatMinutes(stats.pomodoroMinutes) },
+    { label: "日程", value: `${stats.scheduleCount || 0}` },
+    { label: "无边记", value: `${stats.noteCount || 0}` }
+  ];
 }
 
-function buildLocalReport(records) {
-  const app = getApp();
-  const user = app.globalData.user || {};
-  const study = sum(records, "studyMinutes");
-  const entertainment = sum(records, "entertainmentMinutes");
-  const sport = sum(records, "exerciseMinutes") || sum(records, "sportMinutes");
-  const sleepAvg = records.length ? sum(records, "sleepHours") / records.length : 0;
-  const studyGoal = Number(user.studyGoal || 25) * 60;
-  const sportGoal = Number(user.sportGoal || 3) * 30;
-  const sleepGoal = Number(user.sleepGoal || 8);
-  const entertainmentLimit = Number(user.entertainmentLimit || 600);
-  const scores = {
-    study: percent(study, studyGoal),
-    health: Math.round((percent(sport, sportGoal) + percent(sleepAvg, sleepGoal)) / 2),
-    discipline: Math.max(0, 100 - Math.round(Math.max(0, entertainment - entertainmentLimit) / 6)),
-    balance: records.length ? 70 : 0,
-    growth: study > 0 ? 80 : 0
-  };
-  return {
-    stats: {
-      studyMinutes: study,
-      entertainmentMinutes: entertainment,
-      exerciseMinutes: sport,
-      sportMinutes: sport,
-      sleepAvg: Number(sleepAvg.toFixed(1))
-    },
-    scores,
-    advice: records.length
-      ? "继续保持每日记录，一次调整一个习惯。"
-      : "本周添加记录后，会生成更有参考价值的周报。"
-  };
+function moduleCards(input) {
+  const stats = input.stats || {};
+  return [
+    { label: "学习", value: formatMinutes(stats.studyMinutes), cls: "study" },
+    { label: "运动", value: formatMinutes(stats.sportMinutes), cls: "sport" },
+    { label: "睡眠", value: `${stats.sleepAverageHours || 0}h`, cls: "sleep" },
+    { label: "娱乐", value: formatMinutes(stats.entertainmentMinutes), cls: "entertainment" },
+    { label: "日程", value: `${stats.scheduleCount || 0} 项`, cls: "schedule" },
+    { label: "无边记", value: `${stats.noteCount || 0} 条`, cls: "note" },
+    { label: "番茄钟", value: `${stats.pomodoroCount || 0} 次`, cls: "focus" }
+  ];
 }
 
-function toPageData(records, report) {
-  const stats = report.stats || {};
-  const scores = report.scores || {};
-  const maxStudy = Math.max.apply(null, records.map((item) => item.studyMinutes || 0).concat([1]));
-  const totalLife = Math.max(
-    Number(stats.studyMinutes || 0) + Number(stats.entertainmentMinutes || 0) + Number(stats.sportMinutes || stats.exerciseMinutes || 0),
-    1
-  );
-  return {
-    records,
-    stats: {
-      studyHours: (Number(stats.studyMinutes || 0) / 60).toFixed(1),
-      entertainmentHours: (Number(stats.entertainmentMinutes || 0) / 60).toFixed(1),
-      exerciseMinutes: Number(stats.sportMinutes || stats.exerciseMinutes || 0),
-      sleepAvg: stats.sleepAvg || 0
-    },
-    studyBars: records.map((item) => ({
-      label: item.date,
-      width: Math.max(8, Math.round(((item.studyMinutes || 0) / maxStudy) * 100))
-    })),
-    sleepLine: records.map((item) => ({
-      label: item.date,
-      height: Math.max(18, Math.round(((item.sleepHours || 0) / 8) * 100))
-    })),
-    balanceDonut: [
-      { label: "学习", value: Math.round((Number(stats.studyMinutes || 0) / totalLife) * 100), cls: "blue" },
-      { label: "娱乐", value: Math.round((Number(stats.entertainmentMinutes || 0) / totalLife) * 100), cls: "orange" },
-      { label: "运动", value: Math.round((Number(stats.sportMinutes || stats.exerciseMinutes || 0) / totalLife) * 100), cls: "green" }
-    ],
-    radar: [
-      { label: "学习", value: scores.study || 0, cls: "r1" },
-      { label: "健康", value: scores.health || 0, cls: "r2" },
-      { label: "自律", value: scores.discipline || 0, cls: "r3" },
-      { label: "平衡", value: scores.balance || 0, cls: "r4" },
-      { label: "成长", value: scores.growth || 0, cls: "r5" }
-    ],
-    advice: report.advice || report.aiSummary || "添加记录后会生成周报。"
-  };
+function buildShareText(input, report) {
+  const stats = input.stats || {};
+  return [
+    `本周周报 ${input.weekStart} - ${input.weekEnd}`,
+    `总时长：${formatMinutes(stats.totalMinutes)}`,
+    `日程：${stats.scheduleCount || 0} 个，无边记：${stats.noteCount || 0} 条`,
+    `番茄钟：${formatMinutes(stats.pomodoroMinutes)}`,
+    report.shareText || report.summary || ""
+  ].filter(Boolean).join("\n");
 }
 
 Page({
   data: {
-    records: [],
-    stats: {},
-    studyBars: [],
-    sleepLine: [],
-    balanceDonut: [],
-    radar: [],
-    advice: "",
-    diaryAuth: false
+    rangeText: "",
+    aiInput: {},
+    report: {},
+    metricCards: [],
+    moduleCards: [],
+    daily: [],
+    generating: false,
+    shareText: "",
+    decoImage: "/assets/report/weekly-report-deco.svg"
   },
 
   onShow() {
-    this.generateReport();
+    this.loadLocalReport();
   },
 
-  generateReport() {
-    const records = readList(KEYS.records, []).slice(0, 7);
-    const fallback = buildLocalReport(records);
-    this.setData(toPageData(records, fallback));
-
-    api.record.getWeeklyReport({
-      records,
-      allowDiaryAI: this.data.diaryAuth
-    }).then((res) => {
-      this.setData(toPageData(records, res.data || fallback));
-    }).catch((error) => {
-      console.warn("weekly report fallback to local", error.message);
+  loadLocalReport() {
+    const data = buildWeeklyReportData(new Date());
+    const report = data.fallback || buildFallback(data.aiInput);
+    this.setData({
+      rangeText: data.range.rangeText,
+      aiInput: data.aiInput,
+      report,
+      metricCards: metricCards(data.aiInput),
+      moduleCards: moduleCards(data.aiInput),
+      daily: data.aiInput.daily,
+      shareText: buildShareText(data.aiInput, report)
     });
   },
 
-  toggleDiaryAuth(e) {
-    this.setData({ diaryAuth: e.detail.value }, () => this.generateReport());
+  generateAIReport() {
+    if (this.data.generating) return;
+    this.setData({ generating: true });
+    wx.showLoading({ title: "正在生成周报..." });
+    api.report.generateWeeklyReport(this.data.aiInput).then((res) => {
+      const report = (res && res.data) || {};
+      if (report.success === false) {
+        throw new Error(report.message || "generate failed");
+      }
+      this.setData({
+        report,
+        shareText: buildShareText(this.data.aiInput, report)
+      });
+      wx.showToast({ title: "已生成", icon: "success" });
+    }).catch((error) => {
+      console.warn("AI weekly report fallback", error.message);
+      wx.showToast({ title: "周报生成失败，请稍后重试", icon: "none" });
+    }).finally(() => {
+      wx.hideLoading();
+      this.setData({ generating: false });
+    });
+  },
+
+  generateShareText() {
+    if (this.data.shareText) {
+      wx.showToast({ title: "分享文案已生成", icon: "none" });
+      return;
+    }
+    const text = buildShareText(this.data.aiInput, this.data.report || {});
+    this.setData({ shareText: text });
+  },
+
+  copyShareText() {
+    const text = this.data.shareText || buildShareText(this.data.aiInput, this.data.report || {});
+    wx.setClipboardData({
+      data: text,
+      success() {
+        wx.showToast({ title: "已复制", icon: "success" });
+      }
+    });
   }
 });

@@ -1,132 +1,213 @@
-const { KEYS, appendItem, readList, removeItem } = require("../../utils/storage");
+const { KEYS, readList, writeList, removeItem, appendItem } = require("../../utils/storage");
 const { api } = require("../../utils/cloud");
 
 function pad(value) {
   return value < 10 ? `0${value}` : `${value}`;
 }
 
-function dateKeyFrom(date) {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function fallbackParse(text) {
-  const now = new Date();
-  const date = new Date(now);
-  if (/tomorrow|\u660e\u5929/i.test(text)) date.setDate(now.getDate() + 1);
-  const hasAfternoonThree = /3(:00)?\s*pm|15:00|\u4e09\u70b9|3\u70b9/i.test(text);
-  const startTime = hasAfternoonThree ? "15:00" : "19:00";
-  return {
-    title: text.slice(0, 40) || "新日程",
-    type: "日程",
-    dateKey: dateKeyFrom(date),
-    startTime,
-    endTime: startTime === "15:00" ? "16:00" : "20:00",
-    reminder: /30|half|\u534a\u5c0f\u65f6/i.test(text) ? "提前 30 分钟" : "不提醒"
-  };
-}
-
-function localizeReminder(value) {
+function normalizeDateKey(value) {
   const text = String(value || "");
-  const map = {
-    None: "不提醒",
-    "At start": "开始时",
-    "10 min before": "提前 10 分钟",
-    "30 min before": "提前 30 分钟",
-    "1 hour before": "提前 1 小时"
-  };
-  return map[text] || text || "不提醒";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(text)) {
+    const parts = text.split("-");
+    return `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+  }
+  if (/^\d+年\d+月\d+日$/.test(text)) {
+    const parts = text.match(/\d+/g).map(Number);
+    return `${parts[0]}-${pad(parts[1])}-${pad(parts[2])}`;
+  }
+  return "";
 }
 
-function normalizeParsed(parsed, sourceText) {
-  const dateKey = parsed.dateKey || dateKeyFrom(new Date());
-  const parts = dateKey.split("-").map(Number);
-  const clientId = `s${Date.now()}`;
+function formatDateLabel(dateKey) {
+  const parts = String(dateKey || "").split("-");
+  if (parts.length !== 3) return dateKey || "未定日期";
+  return `${Number(parts[0])}年${Number(parts[1])}月${Number(parts[2])}日`;
+}
+
+function buildFallbackId(item) {
+  return [
+    item.dateKey || item.startDateKey || item.date || "",
+    item.startTime || item.start || "",
+    item.endTime || item.end || "",
+    item.title || item.name || item.courseName || ""
+  ].join("|");
+}
+
+function normalizeItem(item, sourceKey) {
+  const rawDate = item.startDateKey || item.dateKey || item.date || "";
+  const dateKey = normalizeDateKey(rawDate);
+  const id = item.clientId || item.id || item._id || item.cloudId || item.searchIndexId || buildFallbackId(item);
+  const title = item.title || item.courseName || item.name || "未命名日程";
+  const startTime = item.startTime || item.start || "";
+  const endTime = item.endTime || item.end || "";
+  const location = item.location || item.classroom || item.note || "";
   return {
-    id: clientId,
-    clientId,
-    title: parsed.title || sourceText.slice(0, 40) || "新日程",
-    type: parsed.type || "日程",
+    id,
+    sourceKey,
+    raw: item,
+    title,
+    dateKey,
+    startDateKey: dateKey,
+    dateLabel: formatDateLabel(dateKey),
+    startTime,
+    endTime,
+    timeText: startTime || endTime ? `${startTime || "--:--"}${endTime ? ` - ${endTime}` : ""}` : "未定时间",
+    location,
+    metaText: location || item.teacher || item.description || "暂无地点或备注"
+  };
+}
+
+function courseToSchedule(course) {
+  const dateKey = normalizeDateKey(course.startDateKey || course.dateKey || course.date);
+  const parts = dateKey ? dateKey.split("-").map(Number) : [];
+  const id = course.clientId || course.id || course._id || `s${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  return {
+    id,
+    clientId: id,
+    title: course.title || course.courseName || course.name || "未命名日程",
+    type: "schedule",
     date: dateKey,
     dateKey,
-    year: parts[0],
-    month: parts[1],
-    day: parts[2],
+    year: parts[0] || "",
+    month: parts[1] || "",
+    day: parts[2] || "",
     startDateKey: dateKey,
     endDateKey: dateKey,
-    startTime: parsed.startTime || "19:00",
-    endTime: parsed.endTime || "20:00",
-    reminder: localizeReminder(parsed.reminder),
-    remindAt: localizeReminder(parsed.reminder),
-    status: "todo",
-    sourceText
+    startTime: course.startTime || course.start || "",
+    endTime: course.endTime || course.end || "",
+    location: course.location || course.classroom || "",
+    note: course.note || course.teacher || "",
+    reminder: course.reminder || "不提醒",
+    repeat: course.repeat || "永不重复",
+    repeatRule: course.repeatRule || { type: "never", interval: 1, endDate: "" },
+    allDay: !!course.allDay,
+    status: course.status || "todo",
+    source: "all-schedules"
   };
+}
+
+function sortItems(a, b) {
+  const dateCompare = String(a.dateKey || "9999-99-99").localeCompare(String(b.dateKey || "9999-99-99"));
+  if (dateCompare) return dateCompare;
+  return String(a.startTime || "99:99").localeCompare(String(b.startTime || "99:99"));
 }
 
 Page({
   data: {
-    courses: [],
-    schedules: [],
-    voiceText: "",
-    parsedCard: null
+    items: [],
+    loading: false,
+    touchStartX: 0,
+    touchStartY: 0
   },
 
   onShow() {
-    this.setData({
-      courses: readList(KEYS.courses, []),
-      schedules: readList(KEYS.schedules, [])
-    });
+    this.loadAllSchedules();
   },
 
-  onVoiceInput(e) {
-    this.setData({ voiceText: e.detail.value });
-  },
-
-  async parseVoice() {
-    const text = this.data.voiceText.trim();
-    if (!text) {
-      wx.showToast({ title: "请输入日程内容", icon: "none" });
+  goBack() {
+    const pages = getCurrentPages();
+    if (pages.length > 1) {
+      wx.navigateBack();
       return;
     }
+    wx.switchTab({ url: "/pages/mine/mine" });
+  },
 
-    try {
-      const res = await api.schedule.parse({ text });
-      this.setData({
-        parsedCard: normalizeParsed(res.data || fallbackParse(text), text)
-      });
-    } catch (error) {
-      console.warn("schedule parse fallback to local", error.message);
-      this.setData({
-        parsedCard: normalizeParsed(fallbackParse(text), text)
-      });
+  loadAllSchedules() {
+    this.setData({ loading: true });
+    const schedules = readList(KEYS.schedules, []).map((item) => normalizeItem(item, KEYS.schedules));
+    const courses = readList(KEYS.courses, []).map((item) => normalizeItem(item, KEYS.courses));
+    this.setData({
+      items: schedules.concat(courses).filter((item) => !item.raw.isDeleted).sort(sortItems),
+      loading: false
+    });
+  },
+
+  onItemTouchStart(e) {
+    const touch = e.touches && e.touches[0];
+    if (!touch) return;
+    this.setData({
+      touchStartX: touch.clientX,
+      touchStartY: touch.clientY
+    });
+  },
+
+  onItemTouchEnd(e) {
+    const touch = e.changedTouches && e.changedTouches[0];
+    if (!touch) return;
+    const deltaX = touch.clientX - this.data.touchStartX;
+    const deltaY = touch.clientY - this.data.touchStartY;
+    if (deltaX < -60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.8) {
+      this.confirmDeleteSchedule(e);
     }
   },
 
-  confirmParsed() {
-    if (!this.data.parsedCard) return;
-    const schedules = appendItem(KEYS.schedules, this.data.parsedCard);
-    api.schedule.create(this.data.parsedCard).catch((error) => {
-      console.warn("schedule create pending local only", error.message);
-    });
-    this.setData({ schedules, parsedCard: null, voiceText: "" });
-    wx.showToast({ title: "已添加", icon: "success" });
+  editSchedule(e) {
+    const id = e.currentTarget.dataset.id;
+    const dateKey = e.currentTarget.dataset.date;
+    const sourceKey = e.currentTarget.dataset.source;
+    if (!id) {
+      wx.showToast({ title: "未找到日程", icon: "none" });
+      return;
+    }
+    const nextId = sourceKey === KEYS.courses ? this.promoteCourseToSchedule(id) : id;
+    if (!nextId) {
+      wx.showToast({ title: "未找到日程", icon: "none" });
+      return;
+    }
+    wx.navigateTo({ url: `/pages/scheduleAdd/scheduleAdd?id=${nextId}&mode=edit&dateKey=${dateKey || ""}` });
   },
 
-  deleteSchedule(e) {
+  promoteCourseToSchedule(id) {
+    const courses = readList(KEYS.courses, []);
+    const course = courses.find((item) => String(item.clientId || item.id || item._id || item.cloudId || buildFallbackId(item)) === String(id));
+    if (!course) return "";
+    const schedule = courseToSchedule(course);
+    appendItem(KEYS.schedules, schedule);
+    writeList(KEYS.courses, courses.filter((item) => item !== course));
+    api.schedule.create(schedule).catch((error) => {
+      console.warn("course promote create pending local only", error.message);
+    });
+    this.loadAllSchedules();
+    return schedule.id;
+  },
+
+  confirmDeleteSchedule(e) {
     const id = e.currentTarget.dataset.id;
+    const sourceKey = e.currentTarget.dataset.source;
+    if (!id) {
+      wx.showToast({ title: "未找到日程", icon: "none" });
+      return;
+    }
     wx.showModal({
       title: "删除日程",
-      content: "该日程将从日历和搜索中隐藏。",
+      content: "删除后该日程将不再显示，是否继续？",
       confirmText: "删除",
-      confirmColor: "#dc2626",
+      cancelText: "取消",
+      confirmColor: "#ef4444",
       success: (res) => {
         if (!res.confirm) return;
-        const schedules = removeItem(KEYS.schedules, id);
+        this.deleteScheduleById(id, sourceKey);
+      }
+    });
+  },
+
+  deleteScheduleById(id, sourceKey) {
+    try {
+      if (sourceKey === KEYS.courses) {
+        removeItem(KEYS.courses, id);
+      } else {
+        removeItem(KEYS.schedules, id);
         api.schedule.delete(id).catch((error) => {
           console.warn("schedule delete pending local only", error.message);
         });
-        this.setData({ schedules });
-        wx.showToast({ title: "已删除", icon: "success" });
       }
-    });
+      this.loadAllSchedules();
+      wx.showToast({ title: "已删除", icon: "success" });
+    } catch (error) {
+      console.warn("delete schedule failed", error);
+      wx.showToast({ title: "删除失败，请稍后重试", icon: "none" });
+    }
   }
 });

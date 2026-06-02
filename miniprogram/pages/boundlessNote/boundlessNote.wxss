@@ -166,6 +166,40 @@ page {
   padding-bottom: 20rpx;
 }
 
+.image-attachments {
+  position: relative;
+  z-index: 2;
+  margin-top: 10rpx;
+  margin-bottom: 14rpx;
+  padding: 18rpx;
+  border-radius: 22rpx;
+  background: #f7f6f1;
+}
+
+.attachment-section-title {
+  display: block;
+  margin-bottom: 14rpx;
+  color: #171717;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.image-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+  width: 100%;
+}
+
+.image-thumb {
+  flex: 0 0 calc((100% - 42rpx) / 4);
+  width: calc((100% - 42rpx) / 4);
+  height: calc((100% - 42rpx) / 4);
+  border-radius: 18rpx;
+  background: #e8e4dc;
+}
+
 .attachment-item {
   position: relative;
   box-sizing: border-box;
@@ -217,6 +251,11 @@ page {
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.scan-text-preview {
+  white-space: normal;
+  max-height: 96rpx;
 }
 
 .attachment-mask {

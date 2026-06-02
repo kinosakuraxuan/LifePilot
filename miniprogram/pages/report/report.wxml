@@ -1,91 +1,87 @@
-<view class="page report-page">
-  <view class="section">
-    <view class="section-title">周报</view>
-    <view class="report-grid">
-      <view class="report-card">
-        <text class="report-value">{{stats.studyHours}}小时</text>
-        <text class="muted">学习</text>
-      </view>
-      <view class="report-card">
-        <text class="report-value">{{stats.entertainmentHours}}小时</text>
-        <text class="muted">娱乐</text>
-      </view>
-      <view class="report-card">
-        <text class="report-value">{{stats.exerciseMinutes}}分钟</text>
-        <text class="muted">运动</text>
-      </view>
-      <view class="report-card">
-        <text class="report-value">{{stats.sleepAvg}}小时</text>
-        <text class="muted">平均睡眠</text>
+<scroll-view class="report-page" type="list" scroll-y="true">
+  <view class="report-hero">
+    <view>
+      <text class="page-title">本周周报</text>
+      <text class="page-subtitle">{{rangeText}}</text>
+    </view>
+    <image class="hero-image" src="{{decoImage}}" mode="aspectFill"></image>
+  </view>
+
+  <view class="metric-grid">
+    <view class="metric-card" wx:for="{{metricCards}}" wx:key="label">
+      <text class="metric-value">{{item.value}}</text>
+      <text class="metric-label">{{item.label}}</text>
+    </view>
+  </view>
+
+  <view class="section-block">
+    <text class="section-title-text">模块概览</text>
+    <view class="module-grid">
+      <view class="module-card {{item.cls}}" wx:for="{{moduleCards}}" wx:key="label">
+        <text class="module-value">{{item.value}}</text>
+        <text class="module-label">{{item.label}}</text>
       </view>
     </view>
   </view>
 
-  <view class="section">
-    <view class="section-title">五维状态</view>
-    <view class="card radar-card">
-      <view class="radar-bg"></view>
-      <view class="radar-point {{item.cls}}" wx:for="{{radar}}" wx:key="label" style="--v: {{item.value}}%;">
-        <view class="radar-dot"></view>
-        <text class="radar-label">{{item.label}} {{item.value}}</text>
-      </view>
+  <view class="section-block">
+    <view class="section-head">
+      <text class="section-title-text">AI 总结</text>
+      <button class="mini-btn" loading="{{generating}}" disabled="{{generating}}" bindtap="generateAIReport">
+        <text>{{generating ? '生成中' : '生成 AI 周报'}}</text>
+      </button>
+    </view>
+    <view class="insight-card">
+      <text class="report-summary">{{report.summary}}</text>
+      <text class="next-focus">下周重点：{{report.nextWeekFocus}}</text>
     </view>
   </view>
 
-  <view class="section">
-    <view class="section-title">学习柱状图</view>
-    <view class="card chart-card">
-      <view class="bar-row" wx:for="{{studyBars}}" wx:key="label">
-        <text class="bar-label">{{item.label}}</text>
-        <view class="bar-track">
-          <view class="bar-fill" style="width: {{item.width}}%;"></view>
-        </view>
-      </view>
+  <view class="section-block">
+    <text class="section-title-text">亮点</text>
+    <view class="list-card" wx:for="{{report.highlights}}" wx:key="*this"><text>{{item}}</text></view>
+    <view class="empty-line" wx:if="{{!report.highlights.length}}"><text>暂无亮点，继续记录后会更清晰。</text></view>
+  </view>
+
+  <view class="section-block">
+    <text class="section-title-text">风险与建议</text>
+    <view class="list-card warn" wx:for="{{report.risks}}" wx:key="*this"><text>{{item}}</text></view>
+    <view class="list-card" wx:for="{{report.suggestions}}" wx:key="*this"><text>{{item}}</text></view>
+  </view>
+
+  <view class="section-block">
+    <text class="section-title-text">日程洞察</text>
+    <view class="list-card" wx:for="{{report.scheduleInsights}}" wx:key="*this"><text>{{item}}</text></view>
+  </view>
+
+  <view class="section-block">
+    <text class="section-title-text">无边记洞察</text>
+    <view class="list-card" wx:for="{{report.noteInsights}}" wx:key="*this"><text>{{item}}</text></view>
+  </view>
+
+  <view class="section-block">
+    <text class="section-title-text">专注洞察</text>
+    <view class="list-card" wx:for="{{report.focusInsights}}" wx:key="*this"><text>{{item}}</text></view>
+  </view>
+
+  <view class="section-block">
+    <text class="section-title-text">每日趋势</text>
+    <view class="daily-card" wx:for="{{daily}}" wx:key="date">
+      <text class="daily-date">{{item.date}}</text>
+      <text class="daily-meta">学习 {{item.studyMinutes}}min · 运动 {{item.sportMinutes}}min · 娱乐 {{item.entertainmentMinutes}}min · 日程 {{item.scheduleCount}}</text>
     </view>
   </view>
 
-  <view class="section">
-    <view class="section-title">睡眠趋势</view>
-    <view class="card sleep-chart">
-      <view class="sleep-column" wx:for="{{sleepLine}}" wx:key="label">
-        <view class="sleep-bar" style="height: {{item.height}}%;"></view>
-        <text class="sleep-label">{{item.label}}</text>
-      </view>
+  <view class="section-block share-block">
+    <view class="section-head">
+      <text class="section-title-text">简易分享</text>
+      <button class="mini-btn ghost" bindtap="generateShareText"><text>生成分享文案</text></button>
+    </view>
+    <view class="share-card">
+      <text class="share-text">{{shareText}}</text>
+      <button class="copy-btn" bindtap="copyShareText"><text>复制分享文案</text></button>
     </view>
   </view>
 
-  <view class="section">
-    <view class="section-title">生活占比</view>
-    <view class="card stack">
-      <view wx:for="{{balanceDonut}}" wx:key="label">
-        <view class="dist-row">
-          <text>{{item.label}}</text>
-          <text>{{item.value}}%</text>
-        </view>
-        <view class="bar-track">
-          <view class="bar-fill {{item.cls}}" style="width: {{item.value}}%;"></view>
-        </view>
-      </view>
-    </view>
-  </view>
-
-  <view class="section">
-    <view class="section-title">笔记分析</view>
-    <view class="card">
-      <view class="row">
-        <view>
-          <text class="auth-title">允许 AI 阅读本周笔记</text>
-          <text class="muted">用于关键词、情绪变化和建议生成。</text>
-        </view>
-        <switch checked="{{diaryAuth}}" bindchange="toggleDiaryAuth" />
-      </view>
-    </view>
-  </view>
-
-  <view class="section">
-    <view class="section-title">建议</view>
-    <view class="card">
-      <text class="advice">{{advice}}</text>
-    </view>
-  </view>
-</view>
+  <view class="bottom-spacer"></view>
+</scroll-view>

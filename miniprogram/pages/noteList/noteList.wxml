@@ -9,7 +9,11 @@
           wx:for-item="note"
           wx:key="id"
           data-id="{{note.id}}"
+          data-cloud-id="{{note.cloudId}}"
           data-date="{{note.date}}"
+          bindtap="editNote"
+          bindtouchstart="onNoteTouchStart"
+          bindtouchend="onNoteTouchEnd"
           bindlongpress="editNote"
         >
           <text class="note-preview" overflow="ellipsis" max-lines="2">{{note.preview}}</text>

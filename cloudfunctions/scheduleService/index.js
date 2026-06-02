@@ -18,6 +18,21 @@ function cleanText(value, maxLength) {
   return String(value || "").trim().slice(0, maxLength);
 }
 
+function normalizeReminder(value) {
+  if (!value || typeof value !== "object") return value || "none";
+  const reminder = Object.assign({}, value);
+  reminder.enabled = !!reminder.enabled;
+  reminder.minutesBefore = reminder.enabled ? Number(reminder.minutesBefore || 0) : null;
+  reminder.remindAt = reminder.enabled ? cleanText(reminder.remindAt, 40) : "";
+  reminder.sent = !!reminder.sent;
+  reminder.subscribed = !!reminder.subscribed;
+  reminder.templateId = cleanText(reminder.templateId, 80);
+  reminder.lastSentAt = cleanText(reminder.lastSentAt, 40);
+  reminder.lastCheckedAt = cleanText(reminder.lastCheckedAt, 40);
+  reminder.label = cleanText(reminder.label, 40);
+  return reminder;
+}
+
 function readEnv(name) {
   return process.env[name] || "";
 }
@@ -170,7 +185,8 @@ async function handleCreate(event, openid) {
     allDay,
     repeatRule: event.repeatRule && typeof event.repeatRule === "object" ? event.repeatRule : { type: "never" },
     excludedDates: Array.isArray(event.excludedDates) ? event.excludedDates : [],
-    reminder: event.reminder || event.remindAt || "none",
+    reminder: normalizeReminder(event.reminder || event.remindAt || "none"),
+    reminderLabel: cleanText(event.reminderLabel || (event.reminder && event.reminder.label), 40),
     url: cleanText(event.url, 300),
     note: cleanText(event.note || event.longText, 1000),
     source: event.source || "manual",
@@ -238,6 +254,10 @@ async function handleUpdate(event, openid) {
   }
   if (event.startTime !== undefined) updates.startTime = cleanText(event.startTime, 10);
   if (event.endTime !== undefined) updates.endTime = cleanText(event.endTime, 10);
+  if (event.reminder !== undefined || event.remindAt !== undefined) {
+    updates.reminder = normalizeReminder(event.reminder || event.remindAt || "none");
+    updates.reminderLabel = cleanText(event.reminderLabel || (event.reminder && event.reminder.label), 40);
+  }
   if (event.isDeleted !== undefined) updates.isDeleted = !!event.isDeleted;
   if (event.focusMinutesDelta !== undefined) updates.focusMinutes = _.inc(Number(event.focusMinutesDelta) || 0);
 
@@ -304,6 +324,8 @@ function mapSchedule(item, source) {
     startTime: item.startTime || "",
     endTime: item.endTime || "",
     location: item.location || item.classroom || "",
+    reminder: item.reminder || "none",
+    reminderLabel: item.reminderLabel || "",
     color: item.color || "#ef4444",
     source
   };
@@ -379,7 +401,9 @@ async function handleListByMonth(event, openid) {
       color: item.color || "#ef4444",
       status: item.status || "todo",
       startTime: item.startTime || "",
-      endTime: item.endTime || ""
+      endTime: item.endTime || "",
+      reminder: item.reminder || "none",
+      reminderLabel: item.reminderLabel || ""
     });
   }
 

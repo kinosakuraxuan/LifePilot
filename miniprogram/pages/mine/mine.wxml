@@ -67,7 +67,11 @@
       <view class="section-title"><text>工具</text></view>
       <view class="card stack">
         <view class="row link-row" data-path="/pages/schedule/schedule" bindtap="goPage">
-          <text>日程解析</text>
+          <text>全部日程</text>
+          <text class="muted">打开</text>
+        </view>
+        <view class="row link-row" data-path="/pages/pomodoroList/pomodoroList" bindtap="goPage">
+          <text>番茄钟</text>
           <text class="muted">打开</text>
         </view>
         <view class="row link-row" bindtap="importCoursesFromImage">
@@ -103,7 +107,14 @@
 
     <view class="section">
       <view class="section-title"><text>无边记</text></view>
-      <view class="note-entry" bindtap="openNotes">
+      <view
+        class="note-entry"
+        data-id="{{latestNote.id}}"
+        data-cloud-id="{{latestNote.cloudId}}"
+        bindtap="openNotes"
+        bindtouchstart="onNoteTouchStart"
+        bindtouchend="onNoteTouchEnd"
+      >
         <view class="note-entry-main">
           <text class="note-entry-title">无边记</text>
           <text class="note-entry-desc">{{latestPreview}}</text>
@@ -127,6 +138,7 @@
         </view>
       </view>
     </view>
+    <view class="mine-bottom-spacer"></view>
   </scroll-view>
 
   <view wx:if="{{courseConfirmVisible}}" class="course-mask" catchtap="closeCourseConfirm"></view>

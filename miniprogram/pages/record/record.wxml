@@ -1,40 +1,35 @@
-<view class="page">
-  <view class="section">
-    <view class="section-title">快速记录</view>
-    <view class="card stack">
-      <view class="form-row">
-        <view class="label">学习 {{form.studyMinutes}} 分钟</view>
-        <slider min="0" max="600" step="10" value="{{form.studyMinutes}}" data-key="studyMinutes" bindchange="updateNumber" activeColor="#2563eb" />
-      </view>
-      <view class="form-row">
-        <view class="label">娱乐 {{form.entertainmentMinutes}} 分钟</view>
-        <slider min="0" max="360" step="10" value="{{form.entertainmentMinutes}}" data-key="entertainmentMinutes" bindchange="updateNumber" activeColor="#f59e0b" />
-      </view>
-      <view class="form-row">
-        <view class="label">运动 {{form.exerciseMinutes}} 分钟</view>
-        <slider min="0" max="180" step="5" value="{{form.exerciseMinutes}}" data-key="exerciseMinutes" bindchange="updateNumber" activeColor="#16a34a" />
-      </view>
-      <view class="form-row">
-        <view class="label">睡眠 {{form.sleepHours}} 小时</view>
-        <slider min="0" max="12" step="0.5" value="{{form.sleepHours}}" data-key="sleepHours" bindchange="updateNumber" activeColor="#7c3aed" />
-      </view>
-      <input class="input" value="{{form.mood}}" placeholder="心情或简短备注" bindinput="updateMood" />
-      <button class="primary-button" bindtap="saveRecord">保存记录</button>
+<scroll-view class="record-page" type="list" scroll-y="true">
+  <view class="record-head">
+    <text class="page-title">生活记录</text>
+    <text class="page-subtitle">{{today}} · 选择一个模块开始记录</text>
+  </view>
+
+  <view class="module-grid">
+    <view
+      class="module-card {{item.cls}}"
+      wx:for="{{modules}}"
+      wx:key="key"
+      data-module="{{item.key}}"
+      bindtap="openModule"
+    >
+      <text class="module-title">{{item.label}}</text>
+      <text class="module-desc">{{item.desc}}</text>
     </view>
   </view>
 
-  <view class="section">
-    <view class="section-title">最近记录</view>
-    <view class="stack">
-      <view class="card" wx:for="{{recent}}" wx:key="id">
-        <view class="row">
-          <view>
-            <view class="record-date">{{item.date}}</view>
-            <view class="muted">学习 {{item.studyMinutes}} 分钟 · 运动 {{item.exerciseMinutes}} 分钟 · 睡眠 {{item.sleepHours}} 小时</view>
-          </view>
-          <view class="pill">{{item.mood || "已记录"}}</view>
-        </view>
+  <view class="section-block">
+    <text class="section-title-text">最近记录</text>
+    <view class="recent-card" wx:for="{{recent}}" wx:key="id">
+      <view class="recent-main">
+        <text class="recent-title">{{item.displayTitle}}</text>
+        <text class="recent-meta">{{item.displayDate}} · {{item.displayMeta}}</text>
       </view>
+      <text class="recent-source">{{item.source === 'pomodoro' ? '番茄钟' : '手动'}}</text>
+    </view>
+    <view class="empty" wx:if="{{!recent.length}}">
+      <text>暂无记录</text>
     </view>
   </view>
-</view>
+
+  <view class="bottom-spacer"></view>
+</scroll-view>

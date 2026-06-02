@@ -76,6 +76,9 @@ const api = {
     createPomodoro(data) {
       return callCloud("recordService", withAction("createPomodoro", data));
     },
+    deletePomodoro(id, extra) {
+      return callCloud("recordService", withAction("deletePomodoro", Object.assign({ id }, extra || {})));
+    },
     getOverview(data) {
       return callCloud("recordService", withAction("getOverview", data));
     },
@@ -92,6 +95,22 @@ const api = {
     },
     listByDate(date) {
       return callCloud("noteService", withAction("listByDate", { date }));
+    }
+  },
+  reminder: {
+    scanDueReminders(data) {
+      return callCloud("reminderService", withAction("scanDueReminders", data));
+    },
+    markReminderSent(id) {
+      return callCloud("reminderService", withAction("markReminderSent", { id }));
+    }
+  },
+  report: {
+    generateWeeklyReport(data) {
+      return callCloud("reportService", withAction("generateWeeklyReport", data));
+    },
+    generateShareSummary(data) {
+      return callCloud("reportService", withAction("generateShareSummary", data));
     }
   },
   courseOCR: {

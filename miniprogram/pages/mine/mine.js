@@ -1,7 +1,7 @@
 const storage = require("../../utils/storage");
 const { api } = require("../../utils/cloud");
 
-const { KEYS, appendItem, listBoundlessNotes } = storage;
+const { KEYS, appendItem, listBoundlessNotes, deleteBoundlessNote } = storage;
 
 const LOGIN_STATUS_KEY = "lifepilot_login_status";
 
@@ -82,6 +82,7 @@ Page({
     user: {},
     noteCount: 0,
     latestPreview: "暂无无边记",
+    latestNote: null,
     aiDiaryAllowed: false,
     profileItems: [],
     isLoggedIn: false,
@@ -98,7 +99,9 @@ Page({
     formStudyGoal: "",
     formSportGoal: "",
     formSleepGoal: "",
-    formEntertainmentLimit: ""
+    formEntertainmentLimit: "",
+    noteTouchStartX: 0,
+    noteTouchStartY: 0
   },
 
   onLoad() {
@@ -139,6 +142,12 @@ Page({
       profileItems: items,
       noteCount: notes.length,
       latestPreview: latest.content ? latest.content.slice(0, 32) : "暂无无边记",
+      latestNote: latest.id ? {
+        id: latest.id || latest.clientId || latest._id || latest.cloudId || "",
+        cloudId: latest.cloudId || latest._id || "",
+        date: latest.date || "",
+        preview: latest.content ? latest.content.slice(0, 32) : "暂无无边记"
+      } : null,
       formSchool: user.school || "",
       formMajor: user.major || "",
       formGrade: user.grade || "",
@@ -212,7 +221,62 @@ Page({
   },
 
   openNotes() {
+    if (this.skipNextNoteTap) {
+      this.skipNextNoteTap = false;
+      return;
+    }
     wx.navigateTo({ url: "/pages/noteList/noteList" });
+  },
+
+  onNoteTouchStart(e) {
+    const touch = e.touches && e.touches[0];
+    if (!touch) return;
+    this.setData({
+      noteTouchStartX: touch.clientX,
+      noteTouchStartY: touch.clientY
+    });
+  },
+
+  onNoteTouchEnd(e) {
+    const touch = e.changedTouches && e.changedTouches[0];
+    if (!touch) return;
+    const deltaX = touch.clientX - this.data.noteTouchStartX;
+    const deltaY = touch.clientY - this.data.noteTouchStartY;
+    if (deltaX < -60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.8) {
+      this.skipNextNoteTap = true;
+      this.confirmDeleteLatestNote();
+    }
+  },
+
+  confirmDeleteLatestNote() {
+    const note = this.data.latestNote || {};
+    const id = note.id || "";
+    const cloudId = note.cloudId || "";
+    if (!id) {
+      wx.showToast({ title: "暂无无边记", icon: "none" });
+      return;
+    }
+    wx.showModal({
+      title: "删除无边记",
+      content: "删除后该无边记将无法恢复，是否继续？",
+      confirmText: "删除",
+      cancelText: "取消",
+      confirmColor: "#ef4444",
+      success: (res) => {
+        if (!res.confirm) return;
+        try {
+          deleteBoundlessNote(id);
+          api.note.delete(cloudId || id, { clientId: id }).catch((error) => {
+            console.warn("note delete pending local only", error.message);
+          });
+          this.refreshUser();
+          wx.showToast({ title: "已删除", icon: "success" });
+        } catch (error) {
+          console.warn("delete note failed", error);
+          wx.showToast({ title: "删除失败，请稍后重试", icon: "none" });
+        }
+      }
+    });
   },
 
   goPage(e) {

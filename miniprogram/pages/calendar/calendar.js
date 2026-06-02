@@ -1,6 +1,7 @@
 const storage = require("../../utils/storage");
 const { api } = require("../../utils/cloud");
 const { normalizeScheduleItem, isScheduleOnDate } = require("../../utils/scheduleIndex");
+const { showDueLocalReminder } = require("../../utils/reminder");
 const KEYS = storage.KEYS;
 const readList = storage.readList;
 const writeList = storage.writeList;
@@ -239,6 +240,7 @@ Page({
     }
     this.refreshCalendar({ skipCloud: true });
     this.loadCloudSchedules(this.data.year, this.data.month, this.data.selectedDay);
+    showDueLocalReminder();
   },
 
   refreshCalendar(options) {
