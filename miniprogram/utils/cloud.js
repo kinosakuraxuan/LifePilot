@@ -113,6 +113,11 @@ const api = {
       return callCloud("reportService", withAction("generateShareSummary", data));
     }
   },
+  speech: {
+    recognize(data) {
+      return callCloud("speechService", withAction("recognize", data));
+    }
+  },
   courseOCR: {
     parseImage(data) {
       return callCloud("ocrCourseService", data);

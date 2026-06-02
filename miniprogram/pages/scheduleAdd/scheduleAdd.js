@@ -263,8 +263,8 @@ Page({
     originalEndDateKey: "",
     isEditingOccurrence: false,
     originalSchedule: null,
-    pageTitle: "鏂板鏃ョ▼",
-    actionText: "娣诲姞",
+    pageTitle: "新增日程",
+    actionText: "添加",
     topBarStyle: "",
     leftActionStyle: "",
     rightActionStyle: ""
@@ -311,8 +311,8 @@ Page({
         originalEndDateKey,
         isEditingOccurrence: occurrenceDateKey !== originalStartDateKey,
         originalSchedule: existing,
-        pageTitle: "缂栬緫鏃ョ▼",
-        actionText: "瀹屾垚"
+        pageTitle: "编辑日程",
+        actionText: "完成"
       }, formDataFromSchedule(existing, occurrenceDateKey));
     }
     this.setData(nextData);
@@ -341,7 +341,7 @@ Page({
     recorder.onError((error) => {
       console.warn("voice record failed", error);
       this.setData({ isRecordingVoice: false, isRecognizingVoice: false });
-      wx.showToast({ title: "褰曢煶澶辫触锛岃閲嶈瘯", icon: "none" });
+      wx.showToast({ title: "录音失败，请重试", icon: "none" });
     });
   },
 
@@ -358,12 +358,12 @@ Page({
   parseScheduleText(text) {
     const content = String(text || "").trim();
     if (!content) {
-      wx.showToast({ title: "璇峰厛杈撳叆鏃ョ▼鎻忚堪", icon: "none" });
+      wx.showToast({ title: "请先输入日程描述", icon: "none" });
       return Promise.resolve(null);
     }
     this.setData({
       isParsingSchedule: true,
-      parseTip: "姝ｅ湪瑙ｆ瀽鏃ョ▼...",
+      parseTip: "正在解析日程...",
       missingFields: []
     });
     return api.schedule.parse({
@@ -521,7 +521,7 @@ Page({
     const option = repeatOptions[Number(e.detail.value)] || repeatOptions[0];
     this.setData({
       repeatValue: option.value,
-      repeatLabel: repeatLabels[option.value] || "姘镐笉閲嶅"
+      repeatLabel: repeatLabels[option.value] || "永不重复"
     });
   },
 
@@ -570,7 +570,7 @@ Page({
     }
     if (!this.data.allDay) {
       if (!this.data.startDateKey || !this.data.startTime || !this.data.endDateKey || !this.data.endTime) {
-        wx.showToast({ title: "璇峰畬鍠勫紑濮嬪拰缁撴潫鏃堕棿", icon: "none" });
+        wx.showToast({ title: "请完善开始和结束时间", icon: "none" });
         return false;
       }
       if (!isEndAfterStart(this.data.startDateKey, this.data.startTime, this.data.startDateKey, this.data.endTime)) {
@@ -699,7 +699,7 @@ Page({
     const single = Object.assign({}, patch, {
       id: newId,
       clientId: newId,
-      repeat: "姘镐笉閲嶅",
+      repeat: "永不重复",
       repeatRule: { type: "never", interval: 1, endDate: "" },
       excludedDates: []
     });
@@ -787,7 +787,7 @@ Page({
     const recorder = wx.getRecorderManager();
     if (this.data.isRecordingVoice) {
       recorder.stop();
-      this.setData({ isRecordingVoice: false, isRecognizingVoice: true, parseTip: "姝ｅ湪璇嗗埆璇煶..." });
+      this.setData({ isRecordingVoice: false, isRecognizingVoice: true, parseTip: "正在识别语音..." });
       return;
     }
     this.setupRecorder();
@@ -803,11 +803,11 @@ Page({
 
   handleVoiceStop(res) {
     if (this.unloaded) return;
-    this.setData({ isRecordingVoice: false, isRecognizingVoice: true, parseTip: "姝ｅ湪璇嗗埆璇煶..." });
+    this.setData({ isRecordingVoice: false, isRecognizingVoice: true, parseTip: "正在识别语音..." });
     this.speechToText(res.tempFilePath).then((text) => {
       const content = String(text || "").trim();
       if (!content) {
-        wx.showToast({ title: "鏈瘑鍒埌璇煶鍐呭", icon: "none" });
+        wx.showToast({ title: "未识别到语音内容", icon: "none" });
         this.setData({ parseTip: "" });
         return null;
       }
@@ -816,13 +816,36 @@ Page({
     }).catch((error) => {
       console.warn("speech to text failed", error);
       this.setData({ parseTip: "" });
-      wx.showToast({ title: "语音识别服务未接入", icon: "none" });
+      const title = error && error.code === 501
+        ? "语音识别服务未配置"
+        : "语音识别失败，请稍后重试";
+      wx.showToast({ title, icon: "none" });
     }).finally(() => {
       this.setData({ isRecognizingVoice: false });
     });
   },
 
   speechToText(tempFilePath) {
-    return Promise.reject(new Error(`speechToText service is not configured: ${tempFilePath || ""}`));
+    const filePath = String(tempFilePath || "");
+    if (!filePath) return Promise.reject(new Error("voice file is empty"));
+    if (!wx.cloud || !wx.cloud.uploadFile) {
+      return Promise.reject(new Error("cloud upload is not available"));
+    }
+    const ext = filePath.split(".").pop() || "mp3";
+    const cloudPath = `speech/schedule-${Date.now()}-${Math.floor(Math.random() * 1000)}.${ext}`;
+    return wx.cloud.uploadFile({
+      cloudPath,
+      filePath
+    }).then((uploadRes) => {
+      if (!uploadRes.fileID) throw new Error("voice upload failed");
+      return api.speech.recognize({
+        fileID: uploadRes.fileID,
+        format: ext,
+        language: "zh-CN"
+      });
+    }).then((res) => {
+      const data = res && res.data;
+      return data && data.text ? data.text : "";
+    });
   }
 });
