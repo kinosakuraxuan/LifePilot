@@ -193,9 +193,9 @@ page {
 }
 
 .image-thumb {
-  flex: 0 0 calc((100% - 42rpx) / 4);
-  width: calc((100% - 42rpx) / 4);
-  height: calc((100% - 42rpx) / 4);
+  flex: 0 0 140rpx;
+  width: 140rpx;
+  height: 140rpx;
   border-radius: 18rpx;
   background: #e8e4dc;
 }

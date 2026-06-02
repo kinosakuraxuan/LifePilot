@@ -75,7 +75,7 @@ function createAttachment(type, title, value, meta) {
 }
 
 function attachmentSource(item) {
-  return item && (item.url || item.path || item.fileID || item.src || item.value || "");
+  return item && (item.tempFileURL || item.localPath || item.url || item.path || item.fileID || item.src || item.value || "");
 }
 
 function isImageAttachment(item) {
@@ -90,9 +90,11 @@ function isImageAttachment(item) {
 function normalizeImageAttachment(item) {
   const normalized = normalizeAttachment(item);
   const src = attachmentSource(normalized);
+  const value = String(normalized.value || "");
   return Object.assign({}, normalized, {
     src,
-    fileID: normalized.fileID || normalized.value || "",
+    fileID: normalized.fileID || (value.indexOf("cloud://") === 0 ? value : ""),
+    localPath: normalized.localPath || normalized.path || (value.indexOf("cloud://") === 0 ? "" : value),
     title: normalized.title || "图片"
   });
 }
@@ -112,6 +114,37 @@ function buildAttachmentView(items) {
     otherAttachments,
     previewImageUrls: imageAttachments.map((item) => item.src).filter(Boolean)
   };
+}
+
+async function resolveCloudImageAttachments(imageAttachments) {
+  const list = imageAttachments || [];
+  const cloudFileIDs = list
+    .map((item) => item.fileID || item.value || "")
+    .filter((value) => String(value).indexOf("cloud://") === 0);
+  if (!cloudFileIDs.length || !wx.cloud || !wx.cloud.getTempFileURL) return null;
+  try {
+    const res = await wx.cloud.getTempFileURL({
+      fileList: cloudFileIDs.map((fileID) => ({ fileID }))
+    });
+    const tempMap = {};
+    (res.fileList || []).forEach((item) => {
+      if (item.fileID && item.tempFileURL) tempMap[item.fileID] = item.tempFileURL;
+    });
+    const nextImages = list.map((item) => {
+      const fileID = item.fileID || item.value || "";
+      return Object.assign({}, item, {
+        src: tempMap[fileID] || item.localPath || item.src,
+        tempFileURL: tempMap[fileID] || item.tempFileURL || ""
+      });
+    });
+    return {
+      imageAttachments: nextImages,
+      previewImageUrls: nextImages.map((item) => item.src).filter(Boolean)
+    };
+  } catch (error) {
+    console.warn("resolve cloud image attachments failed", error);
+    return null;
+  }
 }
 
 function attachmentSignature(items) {
@@ -190,6 +223,7 @@ Page({
     const date = normalizeDate(note.date || note.dateKey || todayKey());
     const content = note.content || note.text || note.note || "";
     const attachments = (note.attachments || note.assets || []).map(normalizeAttachment);
+    const view = buildAttachmentView(attachments);
     this.setData(Object.assign({
       pageMode: mode,
       editingNoteId: note.id || note.clientId || "",
@@ -204,7 +238,8 @@ Page({
       recognizingText: false,
       recording: false,
       playingAudioId: ""
-    }, buildAttachmentView(attachments)));
+    }, view));
+    this.resolveAndSetImageViews(view.imageAttachments);
   },
 
   updateNoteContent(e) {
@@ -280,6 +315,7 @@ Page({
       const attachments = (files || []).map((file) => {
         const path = file.tempFilePath || file.path || file;
         return createAttachment(type, attachmentTitle(type), path, {
+          localPath: path,
           size: file.size || 0,
           width: file.width || 0,
           height: file.height || 0
@@ -287,6 +323,7 @@ Page({
       }).filter((item) => item.value);
       if (!attachments.length) return;
       this.addAttachments(attachments);
+      this.uploadLocalImageAttachments(attachments);
       wx.showToast({ title: type === "photo" ? "已添加照片" : "已添加图片", icon: "success" });
     };
 
@@ -422,12 +459,45 @@ Page({
     }).then((res) => res.fileID);
   },
 
+  uploadLocalImageAttachments(items) {
+    if (!wx.cloud || !wx.cloud.uploadFile) return;
+    (items || []).forEach((item) => {
+      const localPath = item.localPath || item.value || "";
+      if (!localPath || String(localPath).indexOf("cloud://") === 0) return;
+      this.uploadAttachmentFile(localPath, "images").then((fileID) => {
+        const attachments = (this.data.editingNoteAttachments || []).map((attachment) => {
+          if (attachment.id !== item.id) return attachment;
+          return Object.assign({}, attachment, {
+            value: fileID,
+            fileID,
+            localPath
+          });
+        });
+        const view = buildAttachmentView(attachments);
+        this.setData(Object.assign({
+          editingNoteAttachments: attachments,
+          noteDirty: true
+        }, view));
+        this.resolveAndSetImageViews(view.imageAttachments);
+      }).catch((error) => {
+        console.warn("image upload pending local only", error.message);
+      });
+    });
+  },
+
   addAttachments(items, extraUpdates) {
     const attachments = this.data.editingNoteAttachments.concat((items || []).map(normalizeAttachment));
+    const view = buildAttachmentView(attachments);
     this.setData(Object.assign({
       editingNoteAttachments: attachments,
       noteDirty: true
-    }, buildAttachmentView(attachments), extraUpdates || {}));
+    }, view, extraUpdates || {}));
+    this.resolveAndSetImageViews(view.imageAttachments);
+  },
+
+  async resolveAndSetImageViews(imageAttachments) {
+    const resolved = await resolveCloudImageAttachments(imageAttachments);
+    if (resolved) this.setData(resolved);
   },
 
   async resolvePreviewImageUrls(urls) {
@@ -515,10 +585,12 @@ Page({
 
   removeAttachmentById(id) {
     const attachments = this.data.editingNoteAttachments.filter((item) => item.id !== id);
+    const view = buildAttachmentView(attachments);
     this.setData(Object.assign({
       editingNoteAttachments: attachments,
       noteDirty: true
-    }, buildAttachmentView(attachments)));
+    }, view));
+    this.resolveAndSetImageViews(view.imageAttachments);
     wx.showToast({ title: "已移除附件", icon: "success" });
   },
 

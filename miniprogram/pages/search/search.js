@@ -1,4 +1,4 @@
-const { KEYS, readList, listBoundlessNotes } = require("../../utils/storage");
+const { KEYS, readList, writeList, getItemById, listBoundlessNotes } = require("../../utils/storage");
 const { api } = require("../../utils/cloud");
 const { normalizeScheduleItem, dedupeByTypeAndSearchIndex } = require("../../utils/scheduleIndex");
 const { getSafeAreaLayout } = require("../../utils/safeArea");
@@ -31,6 +31,30 @@ function normalizeNoteItem(item) {
     startTime: "",
     location: ""
   });
+}
+
+function ensureEditableSchedule(item) {
+  const id = item.id || item.clientId || item._id || item.cloudId || item.searchIndexId;
+  if (!id || getItemById(KEYS.schedules, id)) return id;
+  const schedules = readList(KEYS.schedules, []);
+  const dateKey = item.startDateKey || item.dateKey || item.date || "";
+  const editable = Object.assign({}, item, {
+    id,
+    clientId: item.clientId || id,
+    cloudId: item.cloudId || item._id || "",
+    title: item.title || item.name || item.courseName || "未命名日程",
+    date: item.date || dateKey,
+    dateKey,
+    startDateKey: dateKey,
+    endDateKey: item.endDateKey || dateKey,
+    startTime: item.startTime || item.start || "",
+    endTime: item.endTime || item.end || "",
+    location: item.location || item.classroom || "",
+    repeatRule: item.repeatRule || { type: "never", interval: 1, endDate: "" },
+    excludedDates: Array.isArray(item.excludedDates) ? item.excludedDates : []
+  });
+  writeList(KEYS.schedules, [editable].concat(schedules));
+  return id;
 }
 
 Page({
@@ -102,5 +126,29 @@ Page({
 
   clearKeyword() {
     this.setData({ keyword: "", results: [], searched: false });
+  },
+
+  openResult(e) {
+    const index = Number(e.currentTarget.dataset.index);
+    const item = this.data.results[index];
+    if (!item) return;
+    if (item.resultType === "note") {
+      const id = item.id || item.clientId || item.searchIndexId;
+      const date = item.date || "";
+      if (!id) {
+        wx.showToast({ title: "未找到无边记", icon: "none" });
+        return;
+      }
+      wx.navigateTo({ url: `/pages/boundlessNote/boundlessNote?id=${encodeURIComponent(id)}&date=${encodeURIComponent(date)}` });
+      return;
+    }
+
+    const id = ensureEditableSchedule(item);
+    const dateKey = item.startDateKey || item.dateKey || item.date || "";
+    if (!id) {
+      wx.showToast({ title: "未找到日程", icon: "none" });
+      return;
+    }
+    wx.navigateTo({ url: `/pages/scheduleAdd/scheduleAdd?id=${encodeURIComponent(id)}&mode=edit&dateKey=${encodeURIComponent(dateKey)}` });
   }
 });
