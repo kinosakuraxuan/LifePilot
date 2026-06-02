@@ -13,6 +13,7 @@
           bindlongpress="editNote"
         >
           <text class="note-preview" overflow="ellipsis" max-lines="2">{{note.preview}}</text>
+          <text wx:if="{{note.attachmentCount}}" class="note-attachment-count">含 {{note.attachmentCount}} 个附件</text>
           <text class="note-time">{{note.updatedAt}}</text>
         </view>
       </view>

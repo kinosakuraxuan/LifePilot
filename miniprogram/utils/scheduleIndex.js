@@ -16,7 +16,7 @@ function buildScheduleSearchIndexId(item) {
 }
 
 function normalizeScheduleItem(item, source) {
-  const date = item.dateKey || item.date || "";
+  const date = item.startDateKey || item.dateKey || item.date || "";
   const title = item.title || item.name || item.courseName || "未命名日程";
   const id = item.clientId || item.id || item._id || buildScheduleSearchIndexId(item);
   return Object.assign({}, item, {
@@ -71,7 +71,7 @@ function isScheduleOnDate(item, dateKey) {
     return false;
   }
   const startKey = item.startDateKey || item.dateKey || item.date || composedDateKey(item);
-  const endKey = item.endDateKey || startKey;
+  const endKey = item.endDateKey && item.endDateKey >= startKey ? item.endDateKey : startKey;
   if (!startKey || !dateKey || dateKey < startKey) return false;
 
   const rule = item.repeatRule || {};
@@ -89,12 +89,8 @@ function isScheduleOnDate(item, dateKey) {
   if (repeatType === "daily") return diffDays % interval === 0;
 
   if (repeatType === "weekly" || repeatType === "biweekly") {
-    const start = toLocalDate(startKey);
-    const target = toLocalDate(dateKey);
     const repeatInterval = repeatType === "biweekly" ? 2 : interval;
-    const weekDiff = Math.floor(diffDays / 7);
-    const weekdays = Array.isArray(rule.weekdays) ? rule.weekdays : [start.getDay()];
-    return weekDiff % repeatInterval === 0 && weekdays.includes(target.getDay());
+    return diffDays % (7 * repeatInterval) === 0;
   }
 
   if (repeatType === "monthly") {

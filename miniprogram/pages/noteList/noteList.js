@@ -25,6 +25,7 @@ Page({
         id: item.id,
         date: item.date,
         preview: previewText(item),
+        attachmentCount: (item.attachments || []).length,
         updatedAt: `${item.updatedAt || item.createdAt || ""}`.slice(11, 16)
       }))
     }));

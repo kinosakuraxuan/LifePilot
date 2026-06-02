@@ -7,6 +7,7 @@ const writeList = storage.writeList;
 const removeItem = storage.removeItem;
 const getItemById = storage.getItemById;
 const updateItem = storage.updateItem;
+const mergeSchedulesToStorage = storage.mergeSchedulesToStorage;
 const createBoundlessNote = storage.createBoundlessNote;
 const updateBoundlessNote = storage.updateBoundlessNote;
 const deleteBoundlessNote = storage.deleteBoundlessNote;
@@ -101,12 +102,16 @@ function displayNoteDate(date) {
 function itemToEvent(item, occurrenceDateKey) {
   const normalized = normalizeScheduleItem(item, item.type || "schedule");
   const title = normalized.title || "未命名";
-  const id = item.clientId || item.id || item._id || normalized.id || normalized.searchIndexId;
+  const id = item.clientId || item.id || item._id || item.cloudId || normalized.id || normalized.searchIndexId;
   return {
     id,
+    storageId: id,
     searchIndexId: normalized.searchIndexId,
     cloudId: item._id || item.cloudId || "",
     occurrenceDateKey,
+    startDateKey: occurrenceDateKey,
+    displayStartDateKey: occurrenceDateKey,
+    originalStartDateKey: item.startDateKey || item.dateKey || item.date || "",
     title,
     displayTitle: compactTitle(title),
     location: normalized.location || normalized.note || "",
@@ -114,6 +119,29 @@ function itemToEvent(item, occurrenceDateKey) {
     end: normalized.endTime || "",
     open: false
   };
+}
+
+function listFromDateResult(res) {
+  const data = res && res.data;
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.items)) return data.items;
+  if (data && Array.isArray(data.schedules)) return data.schedules;
+  return [];
+}
+
+function listFromMonthResult(res) {
+  const days = (res && res.data && res.data.days) || [];
+  const items = [];
+  days.forEach((day) => {
+    (day.items || day.schedules || []).forEach((item) => {
+      items.push(Object.assign({}, item, {
+        occurrenceDateKey: day.date,
+        dateKey: item.dateKey || item.date || "",
+        startDateKey: item.startDateKey || item.dateKey || item.date || ""
+      }));
+    });
+  });
+  return items;
 }
 
 function eventsFor(year, month, day) {
@@ -209,7 +237,8 @@ Page({
     if (typeof this.getTabBar === "function" && this.getTabBar()) {
       this.getTabBar().setData({ selected: 1 });
     }
-    this.refreshCalendar();
+    this.refreshCalendar({ skipCloud: true });
+    this.loadCloudSchedules(this.data.year, this.data.month, this.data.selectedDay);
   },
 
   refreshCalendar(options) {
@@ -236,6 +265,10 @@ Page({
       const dateRes = results[0];
       const monthRes = results[1];
       const dayItems = {};
+      const cloudSchedules = listFromDateResult(dateRes).concat(listFromMonthResult(monthRes));
+      if (cloudSchedules.length) {
+        mergeSchedulesToStorage(cloudSchedules);
+      }
       ((monthRes.data && monthRes.data.days) || []).forEach((day) => {
         const dayNumber = Number(String(day.date).slice(8, 10));
         const items = withSwipeState((day.items || []).map((item) => itemToEvent(item, day.date)), this.data.swipedId);
@@ -243,7 +276,7 @@ Page({
           dayItems[dayNumber] = items;
         }
       });
-      const dateItems = (dateRes.data || []).map((item) => itemToEvent(item, dateKey));
+      const dateItems = listFromDateResult(dateRes).map((item) => itemToEvent(item, dateKey));
       const updates = {
         days: this.data.days.map((item) => {
           if (!item.day || !dayItems[item.day]) return item;
@@ -256,7 +289,9 @@ Page({
       if (dateItems.length) {
         updates.popupEvents = withSwipeState(dateItems, this.data.swipedId);
       }
-      this.setData(updates);
+      this.setData(updates, () => {
+        if (cloudSchedules.length) this.refreshCalendar({ skipCloud: true });
+      });
     }).catch((error) => {
       console.warn("calendar cloud load fallback to local", error.message);
     });
@@ -318,7 +353,8 @@ Page({
       sheetTab: "schedule",
       sheetHeightClass: "three-quarter"
     }, () => {
-      this.refreshCalendar();
+      this.refreshCalendar({ skipCloud: true });
+      this.loadCloudSchedules(this.data.year, this.data.month, day);
       this.loadCloudNotes(selectedDateKey);
       setTimeout(() => this.setData({ sheetOpen: true }), 20);
     });

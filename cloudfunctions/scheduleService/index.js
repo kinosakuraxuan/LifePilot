@@ -94,6 +94,7 @@ async function handleCreate(event, openid) {
     isAllDay: allDay,
     allDay,
     repeatRule: event.repeatRule && typeof event.repeatRule === "object" ? event.repeatRule : { type: "never" },
+    excludedDates: Array.isArray(event.excludedDates) ? event.excludedDates : [],
     reminder: event.reminder || event.remindAt || "none",
     url: cleanText(event.url, 300),
     note: cleanText(event.note || event.longText, 1000),
@@ -142,6 +143,24 @@ async function handleUpdate(event, openid) {
   if (event.title !== undefined) updates.title = cleanText(event.title, 80);
   if (event.location !== undefined) updates.location = cleanText(event.location, 120);
   if (event.note !== undefined) updates.note = cleanText(event.note, 1000);
+  if (event.startDateKey !== undefined || event.dateKey !== undefined || event.date !== undefined) {
+    const startDateKey = event.startDateKey || event.dateKey || event.date;
+    if (!isDateKey(startDateKey)) return fail(400, "valid startDateKey is required");
+    const parts = startDateKey.split("-").map(Number);
+    updates.date = startDateKey;
+    updates.dateKey = startDateKey;
+    updates.startDateKey = startDateKey;
+    updates.endDateKey = startDateKey;
+    updates.year = parts[0];
+    updates.month = parts[1];
+    updates.day = parts[2];
+  }
+  if (event.repeatRule !== undefined && event.repeatRule && typeof event.repeatRule === "object") {
+    updates.repeatRule = event.repeatRule;
+  }
+  if (event.excludedDates !== undefined) {
+    updates.excludedDates = Array.isArray(event.excludedDates) ? event.excludedDates : [];
+  }
   if (event.startTime !== undefined) updates.startTime = cleanText(event.startTime, 10);
   if (event.endTime !== undefined) updates.endTime = cleanText(event.endTime, 10);
   if (event.isDeleted !== undefined) updates.isDeleted = !!event.isDeleted;
@@ -167,6 +186,7 @@ async function handleDelete(event, openid) {
 function isRepeatHit(item, dateKey) {
   const rule = item.repeatRule || {};
   if (!rule.type || rule.type === "never") return false;
+  if (Array.isArray(item.excludedDates) && item.excludedDates.includes(dateKey)) return false;
   const startKey = item.startDateKey || item.dateKey;
   if (!isDateKey(startKey) || dateKey < startKey) return false;
   if (rule.endDate && dateKey > rule.endDate) return false;
@@ -178,9 +198,7 @@ function isRepeatHit(item, dateKey) {
   if (rule.type === "daily") return diffDays % Number(rule.interval || 1) === 0;
   if (rule.type === "weekly" || rule.type === "biweekly") {
     const interval = rule.type === "biweekly" ? 2 : Number(rule.interval || 1);
-    const weekDiff = Math.floor(diffDays / 7);
-    const weekdays = Array.isArray(rule.weekdays) ? rule.weekdays : [start.getDay()];
-    return weekDiff % interval === 0 && weekdays.includes(target.getDay());
+    return diffDays % (7 * interval) === 0;
   }
   if (rule.type === "monthly") return target.getDate() === start.getDate();
   if (rule.type === "yearly") return target.getMonth() === start.getMonth() && target.getDate() === start.getDate();
@@ -189,6 +207,8 @@ function isRepeatHit(item, dateKey) {
 
 function mapSchedule(item, source) {
   const searchIndexId = item._id || item.clientId || "";
+  const startDateKey = item.startDateKey || item.dateKey || item.date || "";
+  const endDateKey = item.endDateKey || startDateKey;
   return {
     id: item.clientId || item._id,
     cloudId: item._id,
@@ -199,8 +219,12 @@ function mapSchedule(item, source) {
     type: item.type || source,
     status: item.status || "todo",
     priority: item.priority || "medium",
-    date: item.dateKey || item.date || "",
-    dateKey: item.dateKey || item.date || "",
+    date: startDateKey,
+    dateKey: startDateKey,
+    startDateKey,
+    endDateKey,
+    repeatRule: item.repeatRule || { type: "never", interval: 1, endDate: "" },
+    excludedDates: Array.isArray(item.excludedDates) ? item.excludedDates : [],
     timeText: item.isAllDay || item.allDay ? "All day" : `${item.startTime || ""}${item.endTime ? ` - ${item.endTime}` : ""}`,
     startTime: item.startTime || "",
     endTime: item.endTime || "",
@@ -261,13 +285,22 @@ async function handleListByMonth(event, openid) {
 
   const daysMap = {};
   function pushDayItem(item, date, source) {
+    const startDateKey = item.startDateKey || item.dateKey || item.date || "";
     if (!daysMap[date]) daysMap[date] = { date, count: 0, items: [] };
     daysMap[date].count += 1;
     daysMap[date].items.push({
       id: item._id,
+      _id: item._id,
       clientId: item.clientId || "",
+      cloudId: item._id,
       title: item.title || item.courseName || item.name || "Untitled",
       type: item.type || source || (item.courseName ? "course" : "schedule"),
+      dateKey: startDateKey,
+      startDateKey,
+      endDateKey: item.endDateKey || startDateKey,
+      occurrenceDateKey: date,
+      repeatRule: item.repeatRule || { type: "never", interval: 1, endDate: "" },
+      excludedDates: Array.isArray(item.excludedDates) ? item.excludedDates : [],
       color: item.color || "#ef4444",
       status: item.status || "todo",
       startTime: item.startTime || "",

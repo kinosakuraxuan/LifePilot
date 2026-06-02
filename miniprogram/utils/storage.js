@@ -63,6 +63,74 @@ function updateItem(key, id, patch) {
   return updated;
 }
 
+function scheduleMergeKey(item) {
+  return String((item && (item.clientId || item.id || item._id || item.cloudId || item.searchIndexId)) || "").trim();
+}
+
+function normalizeScheduleForStorage(item) {
+  const key = scheduleMergeKey(item);
+  const id = item.clientId || item.id || key;
+  const startDateKey = item.startDateKey || item.dateKey || item.date || "";
+  const next = Object.assign({}, item, {
+    id,
+    clientId: item.clientId || item.id || id,
+    cloudId: item._id || item.cloudId || "",
+    searchIndexId: item.searchIndexId || key
+  });
+  if (startDateKey) {
+    next.dateKey = startDateKey;
+    next.startDateKey = startDateKey;
+    next.endDateKey = startDateKey;
+  }
+  return next;
+}
+
+function mergeDateFields(previous, item) {
+  const startDateKey = item.startDateKey || item.dateKey || item.date || previous.startDateKey || previous.dateKey || previous.date || "";
+  if (!startDateKey) return {};
+  return {
+    dateKey: startDateKey,
+    startDateKey,
+    endDateKey: startDateKey
+  };
+}
+
+function mergeSchedulesToStorage(cloudSchedules) {
+  const incoming = (cloudSchedules || []).filter(Boolean).map(normalizeScheduleForStorage);
+  if (!incoming.length) return readList(KEYS.schedules, []);
+  const local = readList(KEYS.schedules, []);
+  const byId = {};
+  const order = [];
+  local.forEach((item) => {
+    const normalized = normalizeScheduleForStorage(item);
+    const key = scheduleMergeKey(normalized);
+    if (!key) return;
+    if (!byId[key]) order.push(key);
+    byId[key] = normalized;
+  });
+  incoming.forEach((item) => {
+    const key = scheduleMergeKey(item);
+    if (!key) return;
+    const previous = byId[key] || {};
+    if (!byId[key]) order.unshift(key);
+    byId[key] = Object.assign({}, previous, item, {
+      id: item.clientId || item.id || previous.id || key,
+      clientId: item.clientId || item.id || previous.clientId || key,
+      cloudId: item._id || item.cloudId || previous.cloudId || "",
+      dateKey: previous.dateKey,
+      startDateKey: previous.startDateKey,
+      endDateKey: previous.endDateKey,
+      excludedDates: Array.isArray(previous.excludedDates) ? previous.excludedDates : item.excludedDates || [],
+      repeatRule: item.repeatRule || previous.repeatRule || { type: "never", interval: 1, endDate: "" },
+      attachments: item.attachments || previous.attachments || []
+    });
+    byId[key] = Object.assign({}, byId[key], mergeDateFields(byId[key], item));
+  });
+  const next = order.map((key) => byId[key]).filter(Boolean);
+  writeList(KEYS.schedules, next);
+  return next;
+}
+
 function todayKey(date) {
   const target = date ? new Date(date) : new Date();
   const year = target.getFullYear();
@@ -81,6 +149,29 @@ function normalizeNoteDate(value) {
   return todayKey();
 }
 
+function normalizeBoundlessAttachment(item) {
+  const rawType = item && item.type;
+  const type = rawType === "camera" ? "photo" : rawType === "record" ? "audio" : rawType === "scan" ? "scanText" : rawType || "";
+  const title = (item && (item.title || item.label)) || "附件";
+  return Object.assign({
+    id: `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    type,
+    title,
+    label: title,
+    value: "",
+    meta: {}
+  }, item || {}, {
+    type,
+    title,
+    label: title,
+    meta: (item && item.meta) || {}
+  });
+}
+
+function normalizeBoundlessAttachments(value) {
+  return (Array.isArray(value) ? value : []).map(normalizeBoundlessAttachment);
+}
+
 function mergeLegacyNotes(date) {
   const legacy = readList(KEYS.diaries, []);
   return legacy
@@ -96,7 +187,8 @@ function readBoundlessNote(date) {
   if (current) {
     return Object.assign({ attachments: [] }, current, {
       content: current.content || "",
-      date: targetDate
+      date: targetDate,
+      attachments: normalizeBoundlessAttachments(current.attachments || current.assets)
     });
   }
   const legacyContent = mergeLegacyNotes(targetDate).join("\n\n");
@@ -124,6 +216,7 @@ function createBoundlessNote(date, patch) {
     updatedAt: now
   }, patch || {}, {
     date: targetDate,
+    attachments: normalizeBoundlessAttachments((patch && patch.attachments) || (patch && patch.assets) || []),
     updatedAt: now
   });
   writeList(KEYS.boundlessNotes, [note].concat(notes));
@@ -140,7 +233,7 @@ function updateBoundlessNote(id, patch) {
       id: item.id || id,
       clientId: item.clientId || item.id || id,
       date: normalizeNoteDate((patch && patch.date) || item.date),
-      attachments: (patch && patch.attachments) || item.attachments || [],
+      attachments: normalizeBoundlessAttachments((patch && (patch.attachments || patch.assets)) || item.attachments || item.assets || []),
       updatedAt: now
     });
     return updated;
@@ -157,13 +250,19 @@ function deleteBoundlessNote(id) {
 }
 
 function getBoundlessNoteById(id) {
-  return readList(KEYS.boundlessNotes, []).find((item) => matchesItemId(item, id)) || null;
+  const note = readList(KEYS.boundlessNotes, []).find((item) => matchesItemId(item, id)) || null;
+  return note ? Object.assign({}, note, {
+    attachments: normalizeBoundlessAttachments(note.attachments || note.assets)
+  }) : null;
 }
 
 function listBoundlessNotesByDate(date) {
   const targetDate = normalizeNoteDate(date);
   return readList(KEYS.boundlessNotes, [])
     .filter((item) => item.status !== "draft" && item.date === targetDate && (item.content || (item.attachments || []).length))
+    .map((item) => Object.assign({}, item, {
+      attachments: normalizeBoundlessAttachments(item.attachments || item.assets)
+    }))
     .sort((a, b) => `${b.updatedAt || b.createdAt || ""}`.localeCompare(`${a.updatedAt || a.createdAt || ""}`));
 }
 
@@ -176,7 +275,7 @@ function saveBoundlessNote(date, patch) {
   const nextNote = Object.assign({}, previous, patch, {
     id: previous.id || `note-${targetDate}`,
     date: targetDate,
-    attachments: patch.attachments || previous.attachments || [],
+    attachments: normalizeBoundlessAttachments(patch.attachments || patch.assets || previous.attachments || previous.assets || []),
     createdAt: previous.createdAt || now,
     updatedAt: now
   });
@@ -186,7 +285,9 @@ function saveBoundlessNote(date, patch) {
 }
 
 function listBoundlessNotes(limit) {
-  const notes = readList(KEYS.boundlessNotes, []).filter((item) => item.status !== "draft");
+  const notes = readList(KEYS.boundlessNotes, []).filter((item) => item.status !== "draft").map((item) => Object.assign({}, item, {
+    attachments: normalizeBoundlessAttachments(item.attachments || item.assets)
+  }));
   const legacy = readList(KEYS.diaries, []).map((item) => ({
     id: item.id,
     date: normalizeNoteDate(item.date || item.createdAt),
@@ -203,9 +304,12 @@ function listBoundlessNotes(limit) {
 
 function getBoundlessDraftByDate(date) {
   const targetDate = normalizeNoteDate(date);
-  return readList(KEYS.boundlessNotes, [])
+  const draft = readList(KEYS.boundlessNotes, [])
     .filter((item) => item.status === "draft" && item.date === targetDate)
     .sort((a, b) => `${b.updatedAt || b.createdAt || ""}`.localeCompare(`${a.updatedAt || a.createdAt || ""}`))[0] || null;
+  return draft ? Object.assign({}, draft, {
+    attachments: normalizeBoundlessAttachments(draft.attachments || draft.assets)
+  }) : null;
 }
 
 function listBoundlessNoteGroups() {
@@ -231,6 +335,7 @@ module.exports = {
   removeItem,
   getItemById,
   updateItem,
+  mergeSchedulesToStorage,
   todayKey,
   readBoundlessNote,
   saveBoundlessNote,

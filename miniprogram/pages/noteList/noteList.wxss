@@ -93,6 +93,16 @@ page {
   font-size: 24rpx;
 }
 
+.note-attachment-count {
+  flex: 0 0 auto;
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
 .empty-panel {
   padding-top: 220rpx;
   color: #94a3b8;

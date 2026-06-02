@@ -95,6 +95,7 @@ async function handleListByDate(event, openid) {
       type: item.type,
       content: item.content || "",
       assets: item.assets || [],
+      attachments: item.assets || [],
       tags: item.tags || [],
       visibleToAI: item.visibleToAI === true,
       createdAt: item.createdAt,

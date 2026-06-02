@@ -17,6 +17,17 @@ function addDays(dateKey, days) {
   return toDateKey(date);
 }
 
+function daysBetween(startDateKey, endDateKey) {
+  const start = toDateTime(startDateKey, "00:00");
+  const end = toDateTime(endDateKey, "00:00");
+  if (!start || !end) return 0;
+  return Math.round((end.getTime() - start.getTime()) / 86400000);
+}
+
+function shiftDateByDays(dateKey, days) {
+  return addDays(dateKey, days || 0);
+}
+
 function formatDateLabel(dateKey) {
   const parts = (dateKey || toDateKey(new Date())).split("-").map(Number);
   return `${parts[0]}年${parts[1]}月${parts[2]}日`;
@@ -77,10 +88,18 @@ function getDefaultDateTime(dateKey) {
 
 function getEndOneHourAfterStart(startDateKey, startTime) {
   const end = addHoursToDateTime(startDateKey, startTime, 1);
+  const endTime = end.dateKey === startDateKey ? end.time : "23:59";
   return {
-    endDateKey: end.dateKey,
-    endDate: formatDateLabel(end.dateKey),
-    endTime: end.time
+    endDateKey: startDateKey,
+    endDate: formatDateLabel(startDateKey),
+    endTime
+  };
+}
+
+function normalizeSingleDayRange(dateKey) {
+  return {
+    endDateKey: dateKey,
+    endDate: formatDateLabel(dateKey)
   };
 }
 
@@ -109,12 +128,13 @@ function findRepeatOption(value) {
   return repeatOptions.find((item) => item.value === value) || repeatOptions[0];
 }
 
-function formDataFromSchedule(schedule) {
-  const startDateKey = schedule.startDateKey || schedule.dateKey || schedule.date || defaultDateKey;
-  const endDateKey = schedule.endDateKey || startDateKey;
+function formDataFromSchedule(schedule, occurrenceDateKey) {
+  const originalStartDateKey = schedule.startDateKey || schedule.dateKey || schedule.date || defaultDateKey;
+  const startDateKey = occurrenceDateKey || originalStartDateKey;
+  const endDateKey = startDateKey;
   const repeatRule = schedule.repeatRule || {};
   const repeatOption = findRepeatOption(repeatRule.type || "never");
-  const repeatEndDateKey = repeatRule.endDate || addDays(startDateKey, 31);
+  const repeatEndDateKey = repeatRule.endDate || addDays(originalStartDateKey, 31);
   return {
     title: schedule.title || schedule.name || schedule.courseName || "",
     location: schedule.location || "",
@@ -161,10 +181,10 @@ Page({
     location: "",
     allDay: false,
     startDateKey: defaultDateTime.startDateKey,
-    endDateKey: defaultDateTime.endDateKey,
+    endDateKey: defaultDateTime.startDateKey,
     startDate: formatDateLabel(defaultDateTime.startDateKey),
     startTime: defaultDateTime.startTime,
-    endDate: formatDateLabel(defaultDateTime.endDateKey),
+    endDate: formatDateLabel(defaultDateTime.startDateKey),
     endTime: defaultDateTime.endTime,
     hasManualEndTime: false,
     repeatValue: "never",
@@ -181,6 +201,9 @@ Page({
     pageMode: "create",
     editId: "",
     editDateKey: "",
+    originalStartDateKey: "",
+    originalEndDateKey: "",
+    isEditingOccurrence: false,
     originalSchedule: null,
     pageTitle: "新增日程",
     actionText: "添加",
@@ -200,7 +223,7 @@ Page({
     const defaults = getDefaultDateTime(dateKey);
     const startTime = options && options.startTime ? options.startTime : defaults.startTime;
     const defaultEnd = getEndOneHourAfterStart(dateKey, startTime);
-    const endDateKey = options && options.endDateKey ? options.endDateKey : defaultEnd.endDateKey;
+    const endDateKey = dateKey;
     const endTime = options && options.endTime ? options.endTime : defaultEnd.endTime;
     const repeatEndDateKey = addDays(dateKey, 31);
     const layout = getSafeAreaLayout();
@@ -219,14 +242,20 @@ Page({
       repeatEndDate: formatDateLabel(repeatEndDateKey)
     };
     if (existing) {
+      const originalStartDateKey = existing.startDateKey || existing.dateKey || existing.date || dateKey;
+      const originalEndDateKey = originalStartDateKey;
+      const occurrenceDateKey = options.dateKey || originalStartDateKey;
       Object.assign(nextData, {
         pageMode: "edit",
         editId: options.id,
-        editDateKey: options.dateKey || existing.startDateKey || existing.dateKey || dateKey,
+        editDateKey: occurrenceDateKey,
+        originalStartDateKey,
+        originalEndDateKey,
+        isEditingOccurrence: occurrenceDateKey !== originalStartDateKey,
         originalSchedule: existing,
         pageTitle: "编辑日程",
         actionText: "完成"
-      }, formDataFromSchedule(existing));
+      }, formDataFromSchedule(existing, occurrenceDateKey));
     }
     this.setData(nextData);
   },
@@ -250,6 +279,10 @@ Page({
 
   adjustInvalidEnd(updates, toastTitle) {
     const nextData = Object.assign({}, this.data, updates);
+    nextData.endDateKey = nextData.startDateKey;
+    nextData.endDate = formatDateLabel(nextData.startDateKey);
+    updates.endDateKey = nextData.startDateKey;
+    updates.endDate = nextData.endDate;
     if (nextData.allDay || isEndAfterStart(nextData.startDateKey, nextData.startTime, nextData.endDateKey, nextData.endTime)) {
       return updates;
     }
@@ -261,11 +294,13 @@ Page({
     const value = e.detail.value;
     const updates = {
       startDateKey: value,
-      startDate: formatDateLabel(value)
+      startDate: formatDateLabel(value),
+      endDateKey: value,
+      endDate: formatDateLabel(value)
     };
     if (this.data.allDay) {
-      updates.endDateKey = value;
-      updates.endDate = formatDateLabel(value);
+      this.setData(updates);
+      return;
     } else if (!this.data.hasManualEndTime) {
       Object.assign(updates, getEndOneHourAfterStart(value, this.data.startTime));
     } else {
@@ -288,11 +323,10 @@ Page({
 
   onEndDateChange(e) {
     if (this.data.allDay) return;
-    const value = e.detail.value;
     const updates = this.adjustInvalidEnd({
       hasManualEndTime: true,
-      endDateKey: value,
-      endDate: formatDateLabel(value)
+      endDateKey: this.data.startDateKey,
+      endDate: formatDateLabel(this.data.startDateKey)
     }, "结束时间必须晚于开始时间，已自动调整");
     this.setData(updates);
   },
@@ -332,19 +366,20 @@ Page({
   },
 
   buildSchedulePatch(id) {
-    const dateParts = this.data.startDateKey.split("-").map(Number);
+    const startDateKey = this.data.startDateKey;
+    const dateParts = startDateKey.split("-").map(Number);
     return {
       id,
       clientId: id,
       title: this.data.title.trim(),
       type: "schedule",
-      date: this.data.startDate,
-      dateKey: this.data.startDateKey,
+      date: formatDateLabel(startDateKey),
+      dateKey: startDateKey,
       year: dateParts[0],
       month: dateParts[1],
       day: dateParts[2],
-      startDateKey: this.data.startDateKey,
-      endDateKey: this.data.allDay ? this.data.startDateKey : this.data.endDateKey,
+      startDateKey,
+      endDateKey: startDateKey,
       startTime: this.data.allDay ? "" : this.data.startTime,
       endTime: this.data.allDay ? "" : this.data.endTime,
       location: this.data.location.trim(),
@@ -372,7 +407,7 @@ Page({
         wx.showToast({ title: "请完善开始和结束时间", icon: "none" });
         return false;
       }
-      if (!isEndAfterStart(this.data.startDateKey, this.data.startTime, this.data.endDateKey, this.data.endTime)) {
+      if (!isEndAfterStart(this.data.startDateKey, this.data.startTime, this.data.startDateKey, this.data.endTime)) {
         wx.showToast({ title: "结束时间必须晚于开始时间", icon: "none" });
         return false;
       }
@@ -437,7 +472,20 @@ Page({
   },
 
   saveAllRepeating(id, patch, original) {
-    const nextPatch = Object.assign({}, patch, {
+    const shouldKeepOriginalDates = this.data.isEditingOccurrence
+      && this.data.editDateKey
+      && patch.startDateKey === this.data.editDateKey;
+    const originalStartDateKey = this.data.originalStartDateKey || original.startDateKey || original.dateKey || patch.startDateKey;
+    const originalEndDateKey = originalStartDateKey;
+    const nextPatch = Object.assign({}, patch, shouldKeepOriginalDates ? {
+      date: formatDateLabel(originalStartDateKey),
+      dateKey: originalStartDateKey,
+      startDateKey: originalStartDateKey,
+      endDateKey: originalEndDateKey,
+      year: Number(originalStartDateKey.slice(0, 4)),
+      month: Number(originalStartDateKey.slice(5, 7)),
+      day: Number(originalStartDateKey.slice(8, 10))
+    } : {}, {
       excludedDates: Array.isArray(original.excludedDates) ? original.excludedDates.slice() : []
     });
     const updated = updateItem(KEYS.schedules, id, nextPatch);

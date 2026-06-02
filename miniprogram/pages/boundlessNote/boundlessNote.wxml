@@ -25,6 +25,53 @@
         maxlength="-1"
       ></textarea>
 
+      <view class="attachment-list" wx:if="{{editingNoteAttachments.length}}">
+        <view
+          wx:for="{{editingNoteAttachments}}"
+          wx:key="id"
+          class="attachment-item type-{{item.type}}"
+          data-id="{{item.id}}"
+          catchtap="previewAttachment"
+        >
+          <block wx:if="{{item.type === 'image' || item.type === 'photo' || item.type === 'scanText'}}">
+            <image class="attachment-thumb" src="{{item.value}}" mode="aspectFill"></image>
+            <view class="attachment-info">
+              <text class="attachment-title">{{item.title}}</text>
+              <text class="attachment-subtitle" wx:if="{{item.type === 'scanText'}}">待识别</text>
+            </view>
+          </block>
+
+          <block wx:elif="{{item.type === 'location'}}">
+            <view class="attachment-kind-dot"></view>
+            <view class="attachment-info">
+              <text class="attachment-title">{{item.title}}</text>
+              <text class="attachment-subtitle">{{item.value}}</text>
+            </view>
+          </block>
+
+          <block wx:elif="{{item.type === 'audio'}}">
+            <view class="attachment-kind-dot"></view>
+            <view class="attachment-info">
+              <text class="attachment-title">{{playingAudioId === item.id ? '正在播放' : item.title}}</text>
+              <text class="attachment-subtitle">点击播放 / 暂停</text>
+            </view>
+          </block>
+
+          <block wx:else>
+            <view class="attachment-kind-dot"></view>
+            <view class="attachment-info">
+              <text class="attachment-title">{{item.title}}</text>
+              <text class="attachment-subtitle">{{item.value}}</text>
+            </view>
+          </block>
+
+          <button class="attachment-remove" data-id="{{item.id}}" catchtap="removeAttachment">
+            <text>×</text>
+          </button>
+        </view>
+      </view>
+
+      <view wx:if="{{attachmentPanelOpen}}" class="attachment-mask" catchtap="closeAttachmentPanel"></view>
       <view class="attachment-panel {{attachmentPanelOpen ? 'is-open' : ''}}">
         <button
           wx:for="{{attachmentOptions}}"
@@ -36,18 +83,6 @@
           <view class="option-dot"></view>
           <text>{{item.label}}</text>
         </button>
-      </view>
-
-      <view class="attachment-preview" wx:if="{{editingNoteAttachments.length}}">
-        <view
-          wx:for="{{editingNoteAttachments}}"
-          wx:key="id"
-          class="attachment-chip"
-          data-id="{{item.id}}"
-          catchtap="removeAttachment"
-        >
-          <text>{{item.label}}</text>
-        </view>
       </view>
 
       <button

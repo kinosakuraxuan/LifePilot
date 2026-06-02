@@ -6,6 +6,7 @@ const readList = storage.readList;
 const removeItem = storage.removeItem;
 const getItemById = storage.getItemById;
 const updateItem = storage.updateItem;
+const mergeSchedulesToStorage = storage.mergeSchedulesToStorage;
 const createBoundlessNote = storage.createBoundlessNote;
 const updateBoundlessNote = storage.updateBoundlessNote;
 const deleteBoundlessNote = storage.deleteBoundlessNote;
@@ -107,18 +108,45 @@ function monthMeta(year, month) {
 
 function itemToEvent(item, occurrenceDateKey) {
   const normalized = normalizeScheduleItem(item, item.type || "schedule");
-  const id = item.clientId || item.id || item._id || normalized.id || normalized.searchIndexId;
+  const id = item.clientId || item.id || item._id || item.cloudId || normalized.id || normalized.searchIndexId;
   return {
     id,
+    storageId: id,
     searchIndexId: normalized.searchIndexId,
     cloudId: item._id || item.cloudId || "",
     occurrenceDateKey,
+    startDateKey: occurrenceDateKey,
+    displayStartDateKey: occurrenceDateKey,
+    originalStartDateKey: item.startDateKey || item.dateKey || item.date || "",
     title: normalized.title,
     location: normalized.location || normalized.note || "",
     start: normalized.startTime || "",
     end: normalized.endTime || "",
     reminder: normalized.reminder || normalized.remindAt || ""
   };
+}
+
+function listFromDateResult(res) {
+  const data = res && res.data;
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.items)) return data.items;
+  if (data && Array.isArray(data.schedules)) return data.schedules;
+  return [];
+}
+
+function listFromMonthResult(res) {
+  const days = (res && res.data && res.data.days) || [];
+  const items = [];
+  days.forEach((day) => {
+    (day.items || day.schedules || []).forEach((item) => {
+      items.push(Object.assign({}, item, {
+        occurrenceDateKey: day.date,
+        dateKey: item.dateKey || item.date || "",
+        startDateKey: item.startDateKey || item.dateKey || item.date || ""
+      }));
+    });
+  });
+  return items;
 }
 
 function eventsFor(year, month, day) {
@@ -220,17 +248,21 @@ Page({
     ]).then((results) => {
       const dateRes = results[0];
       const monthRes = results[1];
-      const cloudEvents = (dateRes.data || []).map((item) => itemToEvent(item, dateKey));
       const activeDates = {};
       ((monthRes.data && monthRes.data.days) || []).forEach((item) => {
         activeDates[item.date] = true;
       });
+      const cloudSchedules = listFromDateResult(dateRes).concat(listFromMonthResult(monthRes));
+      if (cloudSchedules.length) {
+        mergeSchedulesToStorage(cloudSchedules);
+      }
       this.setData({
-        events: withSwipeState(cloudEvents.length ? cloudEvents : this.data.events, this.data.swipedId),
         days: this.data.days.map((item) => {
           const itemDate = item.day ? `${year}-${pad(month)}-${pad(item.day)}` : "";
           return itemDate && activeDates[itemDate] ? Object.assign({}, item, { hasCourse: true }) : item;
         })
+      }, () => {
+        if (cloudSchedules.length) this.refreshCalendar({ skipCloud: true });
       });
     }).catch((error) => {
       console.warn("schedule cloud load fallback to local", error.message);
@@ -250,7 +282,8 @@ Page({
         monthTitle: formatMonth(currentToday.year, currentToday.month),        swipedId: ""
       });
     }
-    this.refreshCalendar();
+    this.refreshCalendar({ skipCloud: true });
+    this.loadCloudSchedules(this.data.year, this.data.month, this.data.selectedDay);
   },
 
   applyMonthDelta(delta) {

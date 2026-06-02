@@ -34,13 +34,48 @@ function findLegacyNote(id) {
   return readList(KEYS.diaries, []).find((item) => String(item.id || "") === String(id || "")) || null;
 }
 
+function attachmentTitle(type) {
+  const titles = {
+    location: "关联地点",
+    image: "图片",
+    photo: "照片",
+    audio: "录音",
+    scanText: "扫描文本"
+  };
+  return titles[type] || "附件";
+}
+
 function normalizeAttachment(item) {
+  const rawType = item && item.type;
+  const type = rawType === "camera" ? "photo" : rawType === "record" ? "audio" : rawType === "scan" ? "scanText" : rawType;
+  const title = (item && (item.title || item.label)) || attachmentTitle(type);
   return Object.assign({
     id: `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-    type: "",
-    label: "",
-    value: ""
-  }, item || {});
+    type: type || "",
+    title,
+    label: title,
+    value: "",
+    meta: {}
+  }, item || {}, {
+    type: type || "",
+    title,
+    label: title,
+    meta: (item && item.meta) || {}
+  });
+}
+
+function createAttachment(type, title, value, meta) {
+  return normalizeAttachment({
+    id: `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    type,
+    title: title || attachmentTitle(type),
+    value: value || "",
+    meta: meta || {}
+  });
+}
+
+function attachmentSignature(items) {
+  return JSON.stringify((items || []).map((item) => normalizeAttachment(item)));
 }
 
 function refreshPreviousPage() {
@@ -65,12 +100,14 @@ Page({
     noteSavedAttachments: [],
     noteDirty: false,
     attachmentPanelOpen: false,
+    recording: false,
+    playingAudioId: "",
     attachmentOptions: [
       { type: "location", label: "关联地点" },
       { type: "image", label: "添加图片" },
-      { type: "record", label: "录音" },
-      { type: "camera", label: "拍照" },
-      { type: "scan", label: "扫描文本" }
+      { type: "audio", label: "录音" },
+      { type: "photo", label: "拍照" },
+      { type: "scanText", label: "扫描文本" }
     ]
   },
 
@@ -97,13 +134,21 @@ Page({
     this.loadNote(initial, isWrite ? "write" : note ? "edit" : "write");
   },
 
+  onUnload() {
+    if (this.audioContext) {
+      this.audioContext.stop();
+      this.audioContext.destroy();
+      this.audioContext = null;
+    }
+  },
+
   loadNote(note, mode) {
     const date = normalizeDate(note.date || note.dateKey || todayKey());
     const content = note.content || note.text || note.note || "";
-    const attachments = (note.attachments || []).map(normalizeAttachment);
+    const attachments = (note.attachments || note.assets || []).map(normalizeAttachment);
     this.setData({
       pageMode: mode,
-      editingNoteId: note.id || "",
+      editingNoteId: note.id || note.clientId || "",
       editingNoteDate: date,
       editingNoteDateText: displayDate(date),
       editingNoteContent: content,
@@ -111,7 +156,9 @@ Page({
       noteSavedContent: content,
       noteSavedAttachments: attachments,
       noteDirty: false,
-      attachmentPanelOpen: false
+      attachmentPanelOpen: false,
+      recording: false,
+      playingAudioId: ""
     });
   },
 
@@ -120,6 +167,7 @@ Page({
     this.setData({
       editingNoteContent: content,
       noteDirty: content !== this.data.noteSavedContent
+        || attachmentSignature(this.data.editingNoteAttachments) !== attachmentSignature(this.data.noteSavedAttachments)
     });
   },
 
@@ -136,70 +184,202 @@ Page({
     this.setData({ attachmentPanelOpen: !this.data.attachmentPanelOpen });
   },
 
+  closeAttachmentPanel() {
+    if (this.data.attachmentPanelOpen) {
+      this.setData({ attachmentPanelOpen: false });
+    }
+  },
+
   handleAttachmentOption(e) {
     const type = e.currentTarget.dataset.type;
     this.setData({ attachmentPanelOpen: false });
-    if (type === "image") {
-      this.chooseImage(["album"], "图片", "image");
-      return;
-    }
-    if (type === "camera") {
-      this.chooseImage(["camera"], "照片", "camera");
-      return;
-    }
     if (type === "location") {
       this.chooseLocation();
       return;
     }
-    if (type === "record") {
-      this.addAttachment({
-        type: "record",
-        label: "录音",
-        value: "录音功能待完善"
-      });
-      wx.showToast({ title: "录音功能待完善", icon: "none" });
+    if (type === "image") {
+      this.chooseImages(["album"], "image");
       return;
     }
-    if (type === "scan") {
-      this.addAttachment({
-        type: "scan",
-        label: "扫描文本",
-        value: "扫描文本功能待完善"
-      });
-      wx.showToast({ title: "扫描文本功能待完善", icon: "none" });
+    if (type === "photo") {
+      this.chooseImages(["camera"], "photo");
+      return;
     }
-  },
-
-  chooseImage(sourceType, label, type) {
-    wx.chooseImage({
-      count: 1,
-      sourceType,
-      success: (res) => {
-        const path = (res.tempFilePaths && res.tempFilePaths[0]) || "";
-        if (!path) return;
-        this.addAttachment({ type, label, value: path });
-      }
-    });
+    if (type === "audio") {
+      this.startRecording();
+      return;
+    }
+    if (type === "scanText") {
+      this.scanText();
+    }
   },
 
   chooseLocation() {
     wx.chooseLocation({
       success: (res) => {
-        this.addAttachment({
-          type: "location",
-          label: "地点",
-          value: res.name || res.address || "已关联地点"
-        });
+        this.addAttachments([createAttachment("location", res.name || "关联地点", res.address || "", {
+          name: res.name || "",
+          address: res.address || "",
+          latitude: res.latitude,
+          longitude: res.longitude
+        })]);
+        wx.showToast({ title: "已关联地点", icon: "success" });
       }
     });
   },
 
-  addAttachment(item) {
-    const attachments = this.data.editingNoteAttachments.concat(normalizeAttachment(item));
+  chooseImages(sourceType, type) {
+    const imageCount = this.data.editingNoteAttachments.filter((item) => item.type === "image" || item.type === "photo").length;
+    const count = Math.max(1, 9 - imageCount);
+    const addFiles = (files) => {
+      const attachments = (files || []).map((file) => {
+        const path = file.tempFilePath || file.path || file;
+        return createAttachment(type, attachmentTitle(type), path, {
+          size: file.size || 0,
+          width: file.width || 0,
+          height: file.height || 0
+        });
+      }).filter((item) => item.value);
+      if (!attachments.length) return;
+      this.addAttachments(attachments);
+      wx.showToast({ title: type === "photo" ? "已添加照片" : "已添加图片", icon: "success" });
+    };
+
+    if (wx.chooseMedia) {
+      wx.chooseMedia({
+        count,
+        mediaType: ["image"],
+        sourceType,
+        success: (res) => addFiles(res.tempFiles || [])
+      });
+      return;
+    }
+
+    wx.chooseImage({
+      count,
+      sourceType,
+      success: (res) => {
+        const files = (res.tempFilePaths || []).map((path, index) => Object.assign({
+          tempFilePath: path
+        }, (res.tempFiles || [])[index] || {}));
+        addFiles(files);
+      }
+    });
+  },
+
+  startRecording() {
+    if (!wx.getRecorderManager) {
+      wx.showToast({ title: "当前环境不支持录音", icon: "none" });
+      return;
+    }
+    const recorder = wx.getRecorderManager();
+    if (!this.recorderBound) {
+      recorder.onStop((res) => {
+        this.setData({ recording: false });
+        if (this.cancelRecording) {
+          this.cancelRecording = false;
+          return;
+        }
+        if (!res.tempFilePath) return;
+        this.addAttachments([createAttachment("audio", "录音", res.tempFilePath, { duration: res.duration || 0 })]);
+        wx.showToast({ title: "已添加录音", icon: "success" });
+      });
+      recorder.onError(() => {
+        this.setData({ recording: false });
+        wx.showToast({ title: "请允许录音权限", icon: "none" });
+      });
+      this.recorderBound = true;
+    }
+    this.setData({ recording: true });
+    recorder.start({ duration: 60000, format: "mp3" });
+    wx.showModal({
+      title: "正在录音",
+      content: "点击停止保存本次录音。",
+      confirmText: "停止",
+      cancelText: "取消",
+      confirmColor: "#ef4444",
+      success: (res) => {
+        this.cancelRecording = !res.confirm;
+        recorder.stop();
+      }
+    });
+  },
+
+  scanText() {
+    const addScan = (path) => {
+      if (!path) return;
+      this.addAttachments([createAttachment("scanText", "扫描文本", path, { pending: true })]);
+      const nextContent = this.data.editingNoteContent
+        ? `${this.data.editingNoteContent}\n[扫描文本待识别]`
+        : "[扫描文本待识别]";
+      this.setData({
+        editingNoteContent: nextContent,
+        noteDirty: true
+      });
+      wx.showToast({ title: "已添加扫描文本", icon: "success" });
+    };
+
+    if (wx.chooseMedia) {
+      wx.chooseMedia({
+        count: 1,
+        mediaType: ["image"],
+        sourceType: ["album", "camera"],
+        success: (res) => addScan(res.tempFiles && res.tempFiles[0] && res.tempFiles[0].tempFilePath)
+      });
+      return;
+    }
+
+    wx.chooseImage({
+      count: 1,
+      sourceType: ["album", "camera"],
+      success: (res) => addScan(res.tempFilePaths && res.tempFilePaths[0])
+    });
+  },
+
+  addAttachments(items) {
+    const attachments = this.data.editingNoteAttachments.concat((items || []).map(normalizeAttachment));
     this.setData({
       editingNoteAttachments: attachments,
       noteDirty: true
     });
+  },
+
+  previewAttachment(e) {
+    const id = e.currentTarget.dataset.id;
+    const item = this.data.editingNoteAttachments.find((attachment) => attachment.id === id);
+    if (!item) return;
+    if (item.type === "image" || item.type === "photo" || item.type === "scanText") {
+      const urls = this.data.editingNoteAttachments
+        .filter((attachment) => attachment.type === "image" || attachment.type === "photo" || attachment.type === "scanText")
+        .map((attachment) => attachment.value)
+        .filter(Boolean);
+      if (item.value) wx.previewImage({ current: item.value, urls });
+      return;
+    }
+    if (item.type === "audio") this.playAudio(item);
+  },
+
+  playAudio(item) {
+    if (!item.value || !wx.createInnerAudioContext) return;
+    if (this.audioContext) {
+      this.audioContext.stop();
+      this.audioContext.destroy();
+      this.audioContext = null;
+      if (this.data.playingAudioId === item.id) {
+        this.setData({ playingAudioId: "" });
+        return;
+      }
+    }
+    const audio = wx.createInnerAudioContext();
+    audio.src = item.value;
+    audio.onEnded(() => this.setData({ playingAudioId: "" }));
+    audio.onError(() => {
+      this.setData({ playingAudioId: "" });
+      wx.showToast({ title: "录音播放失败", icon: "none" });
+    });
+    this.audioContext = audio;
+    this.setData({ playingAudioId: item.id });
+    audio.play();
   },
 
   removeAttachment(e) {
@@ -209,6 +389,7 @@ Page({
       editingNoteAttachments: attachments,
       noteDirty: true
     });
+    wx.showToast({ title: "已移除附件", icon: "success" });
   },
 
   cancelEdit() {
@@ -239,7 +420,7 @@ Page({
 
   persistNote(status, toastTitle) {
     const content = this.data.editingNoteContent;
-    const attachments = this.data.editingNoteAttachments || [];
+    const attachments = (this.data.editingNoteAttachments || []).map(normalizeAttachment);
     if (!content.trim() && !attachments.length) {
       wx.showToast({ title: "请写下内容", icon: "none" });
       return;
@@ -264,7 +445,8 @@ Page({
         date: note.date,
         type: "boundless",
         content: note.content,
-        attachments: note.attachments || []
+        attachments: note.attachments || [],
+        assets: note.attachments || []
       }).catch((error) => {
         console.warn("note save pending local only", error.message);
       });
