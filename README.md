@@ -1,6 +1,6 @@
-# CampusMind 智伴校园小程序详细技术设计文档
+﻿# CampusMind 智伴校园小程序详细技术与操作文档
 
-更新日期：2026-06-01  
+更新日期：2026-06-02  
 项目目录：`lifepilot-miniprogram`  
 产品名称：`CampusMind`  
 工程代号：`CampusMind`
@@ -170,351 +170,9 @@ flowchart LR
   G --> F
 ```
 
-## 5. 核心功能设计
+## 5. 视觉与交互规范
 
-### 5.1 登录与初始化
-
-登录页是用户进入系统的起点。当前版本通过微信云开发获取用户 openid，并在云端创建或更新用户基础资料。
-
-功能内容：
-
-- 进入小程序后首先展示登录页。
-- 用户授权或点击进入后调用 `userService.login`。
-- 若用户首次进入，则初始化用户资料、默认目标和隐私授权字段。
-- 新用户首次登录后进入基本信息录入流程，微信昵称和头像可来自微信授权，其余字段由用户主动填写。
-- 基本信息录入字段包括学校、专业、年级、学习目标、运动目标、睡眠目标和娱乐时长限制。
-- 用户完成基本信息录入后，系统将 `profileCompleted` 标记为 `true`，后续再次进入不再重复弹出初始化表单。
-- 登录成功后进入今日日程页。
-- 用户可在“我的”页面退出当前账号，退出后清理本地登录态并返回登录页。
-
-设计理由：
-
-- 将用户身份与微信 openid 绑定，减少传统账号注册成本。
-- 以云端用户记录作为后续日程、记录、周报和 AI 权限的统一归属。
-- 首次使用不要求填写大量资料，避免进入门槛过高。
-- 当前版本除微信昵称和头像外，学校、专业、年级和目标数据仍存在硬编码或默认值，后续需要改为首次登录表单和“我的”页面共同维护。
-
-技术实现补充：
-
-- 登录成功后读取 `userService.getProfile` 返回的 `profileCompleted`。
-- 若 `profileCompleted` 为 `false`，跳转到基本信息录入页或在登录页展示资料录入表单。
-- 新增或复用 `userService.updateProfile` 保存用户填写内容。
-- 本地缓存只保存必要登录状态，不把用户资料作为唯一可信来源。
-- 退出登录时清理本地 `userSettings`、登录态缓存和页面全局用户状态，云端用户数据不删除。
-
-### 5.2 今日日程
-
-今日日程是默认首页，负责回答用户最核心的问题：“今天有什么安排？”
-
-页面内容：
-
-- 顶部显示当前月份。
-- 顶部右侧提供搜索和新增入口。
-- 中部为紧凑日历，支持选择日期。
-- 日期下方以小圆点标记当天存在日程。
-- 选中某一天后，下方直接展示当天日程列表。
-- 日程项支持左滑删除。
-- 页面提供无边记浮动入口，便于随手记录。
-
-交互规则：
-
-| 状态 | 视觉规则 |
-| --- | --- |
-| 普通日期 | 使用基础文字颜色 |
-| 选中日期 | 使用强调色背景 |
-| 今天 | 使用红色强调 |
-| 有日程日期 | 日期下方显示圆点 |
-| 无日程日期 | 下方展示空状态 |
-
-设计理由：
-
-- 将“日历”和“当日列表”合并在一个页面，减少来回跳转。
-- 首页不堆叠数据概览卡片，把空间留给真正需要执行的安排。
-- 搜索和新增放在顶部，贴近日程管理的最高频行为。
-- 无边记入口悬浮在底部导航上方，既明显又不干扰日程列表。
-
-技术实现：
-
-- 页面文件：`miniprogram/pages/home/home.*`
-- 本地缓存：从 `storage.KEYS.schedules` 读取离线日程。
-- 云端查询：调用 `api.schedule.listByDate(date)` 和 `api.schedule.listByMonth(year, month)`。
-- 降级策略：云函数调用失败时保留本地缓存结果，不阻塞页面使用。
-- 日历生成：通过年份、月份、首日星期和当月天数动态构建日期网格。
-
-### 5.3 新建日程
-
-新建日程页用于录入课程、会议、作业、考试、个人任务等安排。
-
-主要字段：
-
-- 标题。
-- 地点或视频会议链接。
-- 全天开关。
-- 开始日期和时间。
-- 结束日期和时间。
-- 重复规则。
-- 重复结束时间。
-- 提醒时间。
-- URL。
-- 备注。
-- 长文本输入。
-- 语音输入入口。
-
-交互设计：
-
-- 顶部采用“取消 / 新建日程 / 添加”的结构。
-- 时间选择使用微信原生 picker，降低学习成本。
-- 重复规则支持从不、每天、每周、每月等扩展方向。
-- 底部语音按钮作为后续自然语言和语音解析入口。
-- 长文本输入用于粘贴会议说明、课堂要求或任务细节。
-
-设计理由：
-
-- 新建日程参考系统日历，用户迁移成本低。
-- 字段完整但排列清晰，适合课程、会议和个人计划等多类型事件。
-- 语音和自然语言解析暂不强依赖，避免当前版本因外部能力不稳定影响核心流程。
-
-技术实现：
-
-- 页面文件：`miniprogram/pages/scheduleAdd/scheduleAdd.*`
-- 云端创建：`api.schedule.create(data)`
-- 服务端校验：标题必填；开始和结束日期必须为 `YYYY-MM-DD`；非全天事件结束时间不能早于开始时间。
-- 去重机制：若传入 `clientId` 且云端已有同一用户的同一 `clientId`，则更新旧记录而不是重复新增。
-
-### 5.4 日历视图
-
-日历视图用于查看更完整的月度安排，并把日程、无边记和灵感记录组织在同一日期下。
-
-页面内容：
-
-- 顶部显示当前月份。
-- 左右按钮切换月份。
-- 月历网格显示日期和农历标签。
-- 日期格中展示当天日程短标题。
-- 点击日期后打开底部浮层。
-
-日期浮层设计：
-
-- 默认高度约为屏幕的四分之三。
-- 顶部设置拖拽条。
-- 支持上下拖动切换浮层高度。
-- 支持在“详细日程 / 无边记 / 灵感记录”等内容之间切换。
-- 浮层内部内容可滚动。
-- 日程项支持左滑删除。
-- 无边记支持编辑和删除。
-
-设计理由：
-
-- 月视图适合观察安排密度，帮助用户感知忙碌周期。
-- 底部浮层避免点击日期后跳转到新页面，保持上下文连续。
-- 将日程和无边记放在同一日期下，形成“这一天发生了什么”的完整记录。
-
-技术实现：
-
-- 页面文件：`miniprogram/pages/calendar/calendar.*`
-- 本地无边记：通过 `storage.listBoundlessNotesByDate(date)` 读取。
-- 云端日程：调用 `api.schedule.listByDate` 与 `api.schedule.listByMonth`。
-- 云端无边记：调用 `api.note.listByDate(date)`。
-- 删除策略：日程云端软删除，本地记录同步移除；无边记支持云端删除和本地删除。
-
-### 5.5 搜索
-
-搜索页用于按关键词查找日程和无边记。搜索结果的标签只保留两类：`日程` 和 `无边记`。
-
-当前实现：
-
-- 支持输入关键词。
-- 支持清空输入。
-- 支持确认搜索。
-- 搜索结果展示标题、日期、时间、地点、摘要和结果标签。
-- 已接入 `scheduleService.search` 云函数。
-- 同一个日程在今日视图和日历视图中必须使用同一个日程索引，不允许因为页面来源不同而返回两条搜索结果。
-
-设计理由：
-
-- 搜索入口放在今日页顶部，贴近日常查找场景。
-- 搜索结果只展示决策所需信息，避免信息过载。
-- 标签只区分“日程”和“无边记”，避免出现“今日日程”“日历日程”“课程”“任务”等过细标签造成理解负担。
-
-技术实现补充：
-
-- 日程数据以 `scheduleId` 或云端 `_id` 作为唯一索引，今日页和日历页都引用同一条日程记录。
-- 本地缓存中若存在来自不同页面的同一日程，应通过 `clientId`、`cloudId` 或 `_id` 合并。
-- 搜索结果聚合时先按 `type + id` 去重，再按时间排序。
-- 搜索接口建议扩展为统一搜索服务，返回结构为 `{ id, type, label, title, date, timeText, summary }`。
-- `type` 仅允许 `schedule` 和 `note`，对应展示标签为 `日程` 和 `无边记`。
-
-### 5.6 无边记
-
-无边记用于承载自由记录、灵感、日记、课堂碎片和临时想法。
-
-功能内容：
-
-- 今日页提供快速入口。
-- 日历页可按日期查看和编辑无边记。
-- 独立无边记页面支持编辑内容。
-- 支持按日期保存。
-- 支持从旧日记数据迁移合并。
-
-设计理由：
-
-- 学生的很多信息并不适合被结构化成日程，例如课堂灵感、情绪记录、项目想法和临时备忘。
-- 无边记降低记录门槛，不要求用户先选择类型。
-- 与日期绑定后，它可以参与后续周报和 AI 分析。
-
-技术实现：
-
-- 页面文件：`miniprogram/pages/boundlessNote/boundlessNote.*`
-- 本地存储键：`lifepilot_boundless_notes`
-- 云端服务：`noteService`
-- 数据字段包括 `date`、`type`、`content`、`assets`、`tags`、`visibleToAI` 等。
-
-### 5.7 发现页
-
-发现页用于承载生活数据和周报入口。当前采用四象限结构，将学习、运动、娱乐、睡眠组织在同一屏中。
-
-四象限功能：
-
-| 区域 | 功能 | 作用 |
-| --- | --- | --- |
-| 学习 | 查看学习时长和建议 | 帮助用户感知专注投入 |
-| 运动 | 查看运动次数和目标达成 | 鼓励维持身体活动 |
-| 娱乐 | 查看娱乐时长和节奏 | 帮助用户控制娱乐边界 |
-| 睡眠 | 查看睡眠时长和评分 | 帮助用户调整作息 |
-
-页面还提供：
-
-- 番茄钟入口。
-- 无边记入口。
-- 周报或综合状态的引导入口。
-
-设计理由：
-
-- 生活数据不再分散到底部导航，减少一级入口数量。
-- 四象限结构有助于形成空间记忆。
-- 各模块使用不同颜色和简短建议，便于快速扫描。
-
-技术实现：
-
-- 页面文件：`miniprogram/pages/discover/discover.*`
-- 本地概览：`utils/analytics.js` 中的 `buildLocalOverview`。
-- 云端概览：`api.record.getOverview()`。
-- 降级策略：先展示本地计算结果，云端返回后再覆盖。
-
-### 5.8 生活记录
-
-生活记录页用于快速录入每日状态。
-
-当前记录项：
-
-- 学习分钟数。
-- 娱乐分钟数。
-- 运动分钟数。
-- 睡眠小时数。
-- 今日心情。
-- 备注。
-
-交互设计：
-
-- 数值类数据使用滑块或轻量输入。
-- 心情和备注使用文本输入。
-- 保存后写入云端，同时可保留本地缓存。
-- 最近记录可作为反馈，帮助用户确认数据已经保存。
-
-设计理由：
-
-- 大学生很难长期坚持复杂记录，因此记录项必须少而明确。
-- 学习、娱乐、运动、睡眠是与校园生活节奏最相关的基础指标。
-- 滑块比纯数字输入更适合估算型数据。
-
-### 5.9 番茄钟
-
-番茄钟用于让用户从“计划”进入“行动”。
-
-功能内容：
-
-- 选择专注任务或专注类型。
-- 进入计时页面。
-- 完成后保存专注会话。
-- 专注时长同步到生活记录和周报统计。
-- 从番茄钟选择页进入计时页时，计时页必须正确接收任务类型、任务标题和时长参数，避免出现空白页面。
-- 若参数缺失或任务数据不存在，计时页展示错误状态和返回按钮，而不是渲染空白界面。
-
-设计理由：
-
-- 仅有日程管理并不能保证用户执行任务，番茄钟提供行动入口。
-- 将专注记录纳入周报后，用户可以看到安排与实际投入之间的关系。
-- 当前版本存在“选择番茄钟选项后进入页面为空白”的问题，需要把它作为高优先级缺陷修复。
-
-技术实现：
-
-- 页面文件：`miniprogram/pages/pomodoroSelect/pomodoroSelect.*`、`miniprogram/pages/pomodoroTimer/pomodoroTimer.*`
-- 云端服务：`recordService.createPomodoro`
-- 数据集合：`pomodoroSessions`
-- 支持字段包括 `scheduleId`、`category`、`durationMinutes`、`startedAt`、`endedAt`、`completed`、`exitReason`。
-- `pomodoroSelect` 跳转时应通过 query 参数或本地临时状态传递 `category`、`title`、`durationMinutes`。
-- `pomodoroTimer.onLoad(options)` 必须校验参数，缺失时设置 `errorVisible` 并展示可点击返回入口。
-
-### 5.10 数据化周报
-
-周报页将一周内的日程、生活记录和专注数据转化为可读图表和建议。
-
-当前模块：
-
-- 顶部数据卡片：学习总时长、娱乐总时长、运动总时长、平均睡眠。
-- 多维能力或状态评分。
-- 学习趋势或柱状图。
-- 睡眠趋势。
-- 生活占比。
-- AI 周报建议预留。
-- 日记或无边记参与分析的授权提示。
-
-设计重点：
-
-- 不把 1 到 100 分作为唯一反馈，而是通过多个可解释指标展示状态。
-- 图表服务于复盘，不追求复杂数据分析。
-- AI 分析默认不读取主观内容，必须经过用户授权。
-
-技术实现：
-
-- 页面文件：`miniprogram/pages/report/report.*`
-- 云端服务：`recordService.getWeeklyReport`
-- 本地计算：`analytics.buildLocalOverview`
-- 云端报告集合：`reports`
-
-### 5.11 我的
-
-“我的”页面负责个人资料、目标设置、功能管理和隐私授权。
-
-主要内容：
-
-- 用户昵称、学校、专业和年级。
-- 学习目标、运动目标、睡眠目标、娱乐限制。
-- 功能管理入口。
-- 隐私与 AI 授权开关。
-- 周报历史或记录相关入口。
-- 编辑个人信息入口。
-- 保存个人信息按钮。
-- 退出登录按钮。
-
-设计理由：
-
-- 低频设置集中放在“我的”，避免干扰首页高频任务。
-- 目标设置与周报计算相关，放在个人页符合用户心理模型。
-- AI 权限与个人数据放在同一页面，便于用户理解隐私边界。
-- 用户必须能够修改首次登录时填写的信息，否则目标、专业、年级等内容会长期停留在默认值或旧值。
-
-技术实现补充：
-
-- “我的”页面加载时调用 `api.user.getProfile()`，不再依赖硬编码用户资料。
-- 用户修改资料后点击保存，调用 `api.user.updateProfile(formData)`。
-- 保存成功后刷新全局用户状态和本地必要缓存。
-- 保存失败时保留表单内容并展示错误提示。
-- 退出登录按钮需要二次确认，确认后清理本地登录态并 `reLaunch` 到登录页。
-
-## 6. 视觉与交互规范
-
-### 6.1 整体风格
+### 5.1 整体风格
 
 CampusMind 采用清爽的校园工具风格。页面以白色和浅灰背景为主，红色用于关键状态、选中日期和主要行动，蓝色、绿色、紫色、橙色等用于区分生活数据类型。
 
@@ -526,7 +184,7 @@ CampusMind 采用清爽的校园工具风格。页面以白色和浅灰背景为
 - 图表和分类数据使用多色区分，避免单一色系造成识别困难。
 - 文案尽量短，避免在移动端产生换行挤压。
 
-### 6.2 底部导航
+### 5.2 底部导航
 
 底部导航采用自定义 `tabBar`：
 
@@ -542,7 +200,7 @@ CampusMind 采用清爽的校园工具风格。页面以白色和浅灰背景为
 - 图标化导航让页面更轻，但图标语义必须清晰。
 - 选中态颜色与日历中的今日状态保持一致。
 
-### 6.3 直接操纵
+### 5.3 直接操纵
 
 当前项目使用了多种直接操纵方式：
 
@@ -555,7 +213,7 @@ CampusMind 采用清爽的校园工具风格。页面以白色和浅灰背景为
 
 这些交互符合人机交互课程中“直接操纵”的思想：用户通过点击、滑动、拖拽直接作用于界面对象，减少传统表单和多级菜单带来的操作负担。
 
-### 6.4 页面退出与返回规范
+### 5.4 页面退出与返回规范
 
 当前版本中搜索、番茄钟、无边记、详情页等非一级页面存在退出路径不明确的问题。后续所有非 tabBar 页面必须提供明确的退出或返回方式。
 
@@ -569,505 +227,908 @@ CampusMind 采用清爽的校园工具风格。页面以白色和浅灰背景为
 - 保存、删除、退出等关键操作必须提供 toast、modal 或页面状态反馈。
 - 对于自定义导航栏页面，需要自行适配胶囊按钮安全区，避免按钮被微信右上角胶囊遮挡。
 
-## 7. 技术架构
+## 6. 技术架构
 
-### 7.1 总体架构
+### 6.1 技术栈
 
-```mermaid
-flowchart TB
-  U["微信用户"] --> MP["CampusMind 小程序前端"]
-  MP --> API["utils/cloud.js 统一 API 层"]
-  MP --> LS["wx 本地缓存"]
-  API --> UF["userService"]
-  API --> SF["scheduleService"]
-  API --> NF["noteService"]
-  API --> RF["recordService"]
-  UF --> DB["CloudBase 数据库"]
-  SF --> DB
-  NF --> DB
-  RF --> DB
+| 层级 | 技术/框架 | 说明 |
+| --- | --- | --- |
+| 小程序前端 | 微信小程序 WXML / WXSS / JavaScript | 页面、组件、交互与本地缓存 |
+| 组件框架 | `glass-easel` | `app.json` 中启用的小程序组件框架 |
+| 渲染配置 | Skyline 渲染增强 | `project.config.json` 中启用 `skylineRenderEnable` |
+| 云开发 | 微信云开发 | 云函数、云数据库、云存储能力 |
+| 云函数运行时 | Node.js + `wx-server-sdk` | 用户、日程、记录、笔记、提醒、报告服务 |
+| OCR/ASR | 腾讯云 SDK | 课程图片识别、语音识别 |
+| AI 解析/周报 | DeepSeek API | 自然语言日程解析、AI 周报生成 |
+| 本地缓存 | `wx.getStorageSync` / `wx.setStorageSync` | 离线降级、草稿和本地记录 |
+
+### 6.2 工程结构
+
+```text
+lifepilot-miniprogram/
+  project.config.json              # 微信开发者工具项目配置
+  miniprogram/                      # 小程序前端
+    app.js                          # 应用启动、云环境初始化、登录状态同步
+    app.json                        # 页面路由、窗口、底部导航、组件框架配置
+    app.wxss                        # 全局样式
+    custom-tab-bar/                 # 自定义底部导航
+    pages/                          # 页面目录
+    utils/                          # 通用工具、云函数调用、本地缓存和统计计算
+    assets/                         # 图标、装饰图、tabbar 资源
+  cloudfunctions/                   # 云函数目录
+    userService/                    # 用户服务
+    scheduleService/                # 日程服务
+    noteService/                    # 无边记/笔记服务
+    recordService/                  # 生活记录、番茄钟和周报基础统计
+    reminderService/                # 日程提醒扫描与发送
+    reportService/                  # AI 周报生成
+    speechService/                  # 语音识别
+    ocrCourseService/               # 课表图片 OCR 与课程解析
 ```
 
-前端负责：
+### 6.3 启动流程
 
-- 页面渲染、交互、状态展示和本地乐观更新。
-- 调用 `miniprogram/utils/cloud.js` 中的统一 `api`。
-- 处理 loading、empty、error、toast 和本地缓存降级。
-- 根据用户操作进行页面跳转和数据刷新。
+1. 小程序启动后读取本地登录状态键 `lifepilot_login_status`。
+2. 调用 `wx.cloud.init` 初始化云环境，当前环境 ID 为 `cloud1-d0gqsqpco88878b2f`。
+3. 如果没有登录状态，跳转到 `/pages/login/login`。
+4. 如果已有登录状态，调用 `userService.init` 尝试初始化云端集合，再调用 `userService.login` 同步用户资料。
+5. `syncUserData` 将云端用户信息写入 `globalData.user`，供“我的”、发现页、记录和周报等页面使用。
 
-云函数负责：
+## 7. 页面与功能点
 
-- 通过 `cloud.getWXContext()` 获取 `OPENID / APPID / UNIONID`。
-- 按 openid 隔离用户数据。
-- 参数校验、数据写入、软删除、统计聚合。
-- 返回统一数据结构。
-- 后续承载第三方接口、密钥、token、AI 分析等敏感逻辑。
+### 7.1 登录页 `pages/login/login`
 
-本地缓存负责：
+功能点：
 
-- 在云端不可用时提供基本可用体验。
-- 保存临时日程、生活记录和无边记。
-- 支持页面先展示本地结果，再用云端结果覆盖。
+- 展示用户进入 CampusMind 的入口。
+- 调用 `userService.login` 获取或创建用户记录。
+- 新用户或资料未完成用户进入“我的”页补全信息。
+- 已完成资料的用户进入“今日”页。
+- 登录状态写入本地缓存，便于下次启动自动进入。
 
-### 7.2 前端统一调用层
+用户操作：
 
-前端只允许通过 `api` 调用云函数：
+1. 打开小程序。
+2. 在登录页点击进入/授权按钮。
+3. 如果是新用户，进入“我的”页填写个人资料。
+4. 如果是老用户，直接进入今日日程。
+
+### 7.2 今日日程 `pages/home/home`
+
+功能点：
+
+- 默认首页，展示当前月、日期网格和选中日期的日程列表。
+- 支持上下滑动切换月份。
+- 日期下方用圆点标记当天是否有日程。
+- 点击日期后刷新下方日程。
+- 顶部提供搜索入口和新增日程入口。
+- 支持日程左滑删除。
+- 支持点击日程进入编辑。
+- 支持重复日程的单次删除和全部删除。
+- 提供无边记入口，可按日期创建、查看、编辑、删除笔记。
+- 云端不可用时使用本地 `lifepilot_schedules` 与 `lifepilot_boundless_notes` 降级展示。
+
+用户操作：
+
+1. 进入“今日”页查看默认选中的今天。
+2. 点击其他日期查看该日安排。
+3. 点击加号进入新建日程。
+4. 点击搜索进入搜索页。
+5. 左滑日程删除；重复日程可选择删除本次或全部。
+6. 点击无边记入口记录当天想法。
+
+### 7.3 日历视图 `pages/calendar/calendar`
+
+功能点：
+
+- 以月历网格展示整月安排。
+- 支持左右按钮切换月份。
+- 单元格中显示当天短标题或日程密度。
+- 点击日期打开底部浮层。
+- 浮层展示详细日程、无边记和灵感记录。
+- 浮层支持拖拽调整高度。
+- 浮层内支持左右滑动切换内容区。
+- 日程支持编辑、删除、重复日程单次/全部处理。
+- 无边记支持创建、编辑、删除。
+
+用户操作：
+
+1. 切换到“日历”页。
+2. 点击某一天打开底部浮层。
+3. 在浮层中查看当日日程和笔记。
+4. 拖动浮层顶部调整显示高度。
+5. 点击日程编辑，或左滑删除。
+6. 点击无边记入口编辑当天记录。
+
+### 7.4 搜索页 `pages/search/search`
+
+功能点：
+
+- 支持关键词搜索日程和课程。
+- 云端调用 `scheduleService.search`。
+- 搜索字段包括标题、名称、课程名、类型、地点、教室、日期和备注。
+- 前端对结果进行标准化与去重。
+- 结果展示标题、时间、日期、地点和分类标签。
+- 空关键词或无结果时展示空状态。
+
+用户操作：
+
+1. 在今日页点击搜索图标。
+2. 输入关键词，例如课程名、地点、任务名或日期。
+3. 点击结果查看对应事项。
+4. 通过返回入口回到今日页。
+
+### 7.5 新建/编辑日程 `pages/scheduleAdd/scheduleAdd`
+
+功能点：
+
+- 支持新建和编辑两种模式。
+- 字段包括标题、地点、全天开关、开始日期、开始时间、结束日期、结束时间、重复规则、重复结束日期、提醒、URL、备注和长文本。
+- 默认开始时间为当前时间向上取整到半小时，默认结束时间为开始后一小时。
+- 支持非全天日程的时间合法性校验。
+- 支持创建、编辑、删除日程。
+- 支持重复日程编辑：仅修改本次或修改全部。
+- 支持重复日程删除：仅删除本次或删除全部。
+- 支持提醒配置，写入 `reminder` 对象。
+- 支持语音输入入口，可调用 `speechService.recognize` 与 `scheduleService.parse` 解析自然语言。
+- 保存时同时写入本地缓存，并调用 `scheduleService.create/update` 同步云端。
+
+用户操作：
+
+1. 从今日页或日历页点击新增/编辑。
+2. 填写标题、时间、地点和提醒等信息。
+3. 点击保存。
+4. 如果编辑重复日程，按弹窗选择“仅本次”或“全部重复日程”。
+5. 返回今日页或日历页查看更新结果。
+
+### 7.6 课表与日程管理 `pages/schedule/schedule`
+
+功能点：
+
+- 汇总展示本地课程和日程。
+- 支持将课程提升为日程并同步云端。
+- 支持点击日程进入编辑。
+- 支持左滑删除。
+- 可从“我的”页进入，用于课表/日程导入后的统一管理。
+
+用户操作：
+
+1. 在“我的”页进入课表与日程管理。
+2. 查看导入的课程和手动创建的日程。
+3. 点击事项编辑，或左滑删除。
+4. 对课程类条目可转换/同步为日程。
+
+### 7.7 发现页 `pages/discover/discover`
+
+功能点：
+
+- 展示本周学习、运动、娱乐、睡眠四类数据概览。
+- 使用 `activityStats.buildDiscoverData` 从本地记录和番茄钟记录计算统计。
+- 展示总时长、活跃模块、周趋势和模块卡片。
+- 支持下拉刷新。
+- 点击模块进入模块详情。
+- 提供番茄钟入口。
+
+用户操作：
+
+1. 切换到“发现”页查看本周状态。
+2. 点击学习、运动、娱乐或睡眠卡片查看详情。
+3. 点击专注入口进入番茄钟选择页。
+4. 下拉刷新更新本地统计。
+
+### 7.8 发现模块详情 `pages/discoverModule/discoverModule`
+
+功能点：
+
+- 按模块展示一周趋势图、今日时长、本周累计、记录数等指标。
+- 展示该模块关联的手动记录和番茄钟记录。
+- 提供新增该模块记录入口。
+
+用户操作：
+
+1. 从发现页点击某个模块。
+2. 查看趋势和记录明细。
+3. 点击新增记录进入 `recordModule`。
+
+### 7.9 生活记录总览 `pages/record/record`
+
+功能点：
+
+- 展示最近生活记录。
+- 支持进入四类模块记录：学习、运动、娱乐、睡眠。
+- 从本地 `lifepilot_records` 读取记录。
+- 可作为用户补充每日状态的入口。
+
+用户操作：
+
+1. 从“我的”页或模块详情进入生活记录。
+2. 查看最近记录。
+3. 点击某类记录进入具体录入页。
+
+### 7.10 模块记录 `pages/recordModule/recordModule`
+
+功能点：
+
+- 支持按模块记录标题、时长、开始时间、结束时间和备注。
+- 支持学习、运动、娱乐、睡眠四类模块。
+- 记录写入本地 `lifepilot_records`。
+- 同步调用 `recordService.createRecord`。
+- 保存后清空表单。
+
+用户操作：
+
+1. 选择模块。
+2. 填写时长、时间和备注。
+3. 点击保存。
+4. 返回发现页或详情页查看统计变化。
+
+### 7.11 番茄钟选择 `pages/pomodoroSelect/pomodoroSelect`
+
+功能点：
+
+- 提供不同模块或任务的专注入口。
+- 选择后跳转到番茄钟计时页。
+- 可用于学习、运动、娱乐、睡眠等模块的计时记录。
+
+用户操作：
+
+1. 从发现页进入番茄钟。
+2. 选择专注类型或任务。
+3. 进入计时页开始专注。
+
+### 7.12 番茄钟计时 `pages/pomodoroTimer/pomodoroTimer`
+
+功能点：
+
+- 接收分类、标题、时长等参数。
+- 展示倒计时界面。
+- 支持开始、暂停、继续和结束。
+- 结束后生成本地番茄钟记录。
+- 调用 `recordService.createPomodoro` 同步云端。
+- 云端同步后可累计到生活记录和关联日程的 `focusMinutes`。
+
+用户操作：
+
+1. 在选择页点击一个番茄钟任务。
+2. 点击开始计时。
+3. 中途可暂停或继续。
+4. 结束后保存专注记录。
+5. 在发现页、模块详情或番茄钟列表查看统计。
+
+### 7.13 番茄钟列表 `pages/pomodoroList/pomodoroList`
+
+功能点：
+
+- 展示历史番茄钟记录。
+- 支持删除番茄钟记录。
+- 删除时本地调用 `deletePomodoroRecord`，云端调用 `recordService.deletePomodoro`。
+
+用户操作：
+
+1. 进入番茄钟记录列表。
+2. 查看历史专注时间。
+3. 删除不需要的记录。
+
+### 7.14 无边记编辑 `pages/boundlessNote/boundlessNote`
+
+功能点：
+
+- 支持新建、编辑、草稿和查看模式。
+- 支持文本记录。
+- 支持图片、拍照、位置、录音、扫描文本等附件。
+- 支持录音播放。
+- 支持未保存内容离开前提醒。
+- 支持保存草稿并退出。
+- 支持删除当前笔记。
+- 本地写入 `lifepilot_boundless_notes`。
+- 云端调用 `noteService.create/delete`。
+
+用户操作：
+
+1. 从今日页、日历页或笔记列表进入无边记。
+2. 输入文本，或添加附件。
+3. 可录音、拍照、选择位置或扫描文字。
+4. 点击保存。
+5. 未保存时返回会提示是否离开。
+
+### 7.15 无边记列表 `pages/noteList/noteList`
+
+功能点：
+
+- 按日期分组展示无边记。
+- 支持进入笔记详情编辑。
+- 支持删除笔记。
+- 与“我的”页的最近无边记联动。
+
+用户操作：
+
+1. 从“我的”页点击无边记入口。
+2. 按日期查看历史记录。
+3. 点击记录编辑。
+4. 删除不需要的记录。
+
+### 7.16 我的 `pages/mine/mine`
+
+功能点：
+
+- 展示用户昵称、头像、学校、专业、年级和目标信息。
+- 支持保存个人资料。
+- 支持学习目标、运动目标、睡眠目标、娱乐限制配置。
+- 支持 AI 权限开关，例如日记/笔记/记录/周报是否允许 AI 使用。
+- 展示最近无边记。
+- 支持左滑删除最近无边记。
+- 提供课表导入、生活记录、周报、番茄钟记录、无边记列表等入口。
+- 支持选择课表图片并调用 `ocrCourseService` 识别课程。
+- 将识别出的课程转换为本地课程/日程，并可同步到 `scheduleService.create`。
+
+用户操作：
+
+1. 切换到“我的”页。
+2. 编辑学校、专业、年级和目标。
+3. 点击保存资料。
+4. 管理 AI 授权开关。
+5. 进入课表、周报、生活记录、无边记等功能。
+6. 选择课表图片导入课程。
+
+### 7.17 周报 `pages/report/report`
+
+功能点：
+
+- 汇总本周学习、娱乐、运动、睡眠数据。
+- 展示五维评分或多指标统计。
+- 展示建议、风险和下周重点。
+- 调用 `recordService.getWeeklyReport` 生成基础统计。
+- 可调用 `reportService.generateWeeklyReport` 使用 DeepSeek 生成 AI 周报。
+- 可调用 `reportService.generateShareSummary` 生成分享摘要。
+
+用户操作：
+
+1. 从发现页或“我的”页进入周报。
+2. 查看本周统计指标。
+3. 根据建议调整下周安排。
+4. 如已配置 AI 服务，可生成更完整的文字周报。
+
+### 7.18 运动详情 `pages/sport/sport`
+
+功能点：
+
+- 展示运动相关统计。
+- 使用全局目标和本地记录计算运动状态。
+- 提供进入生活记录的入口。
+
+用户操作：
+
+1. 从发现页或模块入口进入运动详情。
+2. 查看运动次数、时长、目标完成情况。
+3. 点击记录入口补充运动记录。
+
+### 7.19 娱乐详情 `pages/entertainment/entertainment`
+
+功能点：
+
+- 展示娱乐时长和娱乐限制相关信息。
+- 基于用户设置的 `entertainmentLimit` 提示状态。
+- 提供进入生活记录的入口。
+
+用户操作：
+
+1. 进入娱乐详情。
+2. 查看本周娱乐时长和限制情况。
+3. 需要补充时进入记录页。
+
+### 7.20 睡眠详情 `pages/sleep/sleep`
+
+功能点：
+
+- 展示睡眠时长、目标和状态。
+- 基于用户 `sleepGoal` 计算提示。
+- 提供进入生活记录的入口。
+
+用户操作：
+
+1. 进入睡眠详情。
+2. 查看平均睡眠和目标差距。
+3. 补充睡眠记录。
+
+### 7.21 通用自定义底部导航 `custom-tab-bar`
+
+功能点：
+
+- 四个一级入口：今日、日历、发现、我的。
+- 仅显示图标，不显示文字。
+- 选中态使用红色图标。
+- 点击后使用 `wx.switchTab` 切换页面。
+
+## 8. 云函数与接口
+
+所有前端云函数调用统一封装在 `miniprogram/utils/cloud.js`。返回结果通过 `normalizeResult` 标准化：当返回 `code !== 0` 时抛出错误，否则返回 `{ code, message, data }`。
+
+### 8.1 `userService`
+
+集合：`users`、`schemaVersions`，并负责初始化其他集合。
+
+| action | 功能 | 主要入参 | 返回 |
+| --- | --- | --- | --- |
+| `login` | 登录或创建用户 | `nickName`、`avatarUrl`、资料字段 | `user`、`isNewUser` |
+| `init` | 初始化数据库集合和 schema 版本 | 用户信息可选 | 集合初始化结果 |
+| `updateProfile` | 更新用户资料和权限 | 学校、专业、目标、AI 权限 | 更新后的用户 |
+| `getProfile` | 获取用户资料和目标 | 无 | `user`、`goals` |
+
+用户默认配置：
 
 ```js
-const { api } = require("../../utils/cloud");
+{
+  studyGoal: 25,
+  sportGoal: 3,
+  sleepGoal: 8,
+  entertainmentLimit: 600
+}
 ```
 
-统一调用层的价值：
+### 8.2 `scheduleService`
 
-- 页面不直接拼接云函数调用细节。
-- 统一处理返回格式和错误抛出。
-- 便于后续替换后端服务或增加日志监控。
-- 保证所有页面调用方式一致。
+集合：`schedules`、`courses`。
 
-### 7.3 云函数服务划分
-
-当前已合并为 4 个服务型云函数：
-
-| 服务 | action | 用途 |
+| action | 功能 | 说明 |
 | --- | --- | --- |
-| `userService` | `login` | 登录并同步基础用户信息 |
-| `userService` | `init` | 初始化集合、schemaVersion 和当前用户 |
-| `userService` | `updateProfile` | 更新目标、偏好和隐私授权 |
-| `userService` | `getProfile` | 获取用户资料和目标 |
-| `userService` | `logout` | 清理前端登录态的语义接口，云端通常不删除用户 |
-| `scheduleService` | `create` | 新建或去重写入日程 |
-| `scheduleService` | `update` | 修改状态、标题、地点、备注、专注时长等 |
-| `scheduleService` | `delete` | 软删除日程 |
-| `scheduleService` | `listByDate` | 查询某日课程和日程 |
-| `scheduleService` | `listByMonth` | 查询月视图日程摘要 |
-| `scheduleService` | `search` | 搜索课程和日程 |
-| `scheduleService` | `parse` | 解析自然语言日程文本 |
-| `noteService` | `create` | 新建或更新无边记 |
-| `noteService` | `delete` | 删除无边记 |
-| `noteService` | `listByDate` | 查询某日所有无边记 |
-| `recordService` | `createRecord` | 新建或更新日记录 |
-| `recordService` | `createPomodoro` | 保存番茄钟并同步日记录 |
-| `recordService` | `getOverview` | 获取发现页概览 |
-| `recordService` | `getWeeklyReport` | 生成周报 |
+| `create` | 创建日程 | 支持 `clientId` 去重，已有则更新 |
+| `update` | 更新日程 | 支持状态、优先级、时间、重复规则、提醒等字段 |
+| `delete` | 删除日程 | 软删除，设置 `isDeleted: true` |
+| `listByDate` | 查询某天日程 | 合并普通日程、重复日程和课程 |
+| `listByMonth` | 查询月视图 | 返回每天日程数量和短列表 |
+| `search` | 搜索日程和课程 | 支持多字段正则匹配 |
+| `parse` | 自然语言日程解析 | 依赖 `DEEPSEEK_API_KEY` |
 
-### 7.4 统一返回格式
+日程核心字段：
 
-成功：
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {}
-}
-```
-
-失败：
-
-```json
-{
-  "code": 400,
-  "message": "valid date is required",
-  "data": null
-}
-```
-
-错误码约定：
-
-| code | 含义 |
+| 字段 | 说明 |
 | --- | --- |
-| `400` | 参数错误 |
-| `401` | 未登录或 openid 不存在 |
-| `403` | 无权限访问该数据 |
-| `404` | action 或资源不存在 |
-| `500` | 服务端异常 |
+| `openid/userId` | 用户归属 |
+| `clientId` | 前端本地 ID，用于离线合并和云端去重 |
+| `title` | 标题 |
+| `type` | `course/task/exam/meeting/habit/personal/schedule` |
+| `dateKey/startDateKey/endDateKey` | 日期 |
+| `startTime/endTime` | 时间 |
+| `repeatRule` | 重复规则 |
+| `excludedDates` | 重复日程中排除的日期 |
+| `reminder` | 提醒配置 |
+| `focusMinutes` | 关联专注时长 |
+| `isDeleted` | 软删除标记 |
 
-## 8. 数据模型设计
+### 8.3 `noteService`
 
-### 8.1 users
+集合：`notes`。
 
-用户集合用于存储基础资料、目标和授权偏好。
+| action | 功能 | 说明 |
+| --- | --- | --- |
+| `create` | 创建或更新笔记 | 支持 `clientId` 去重 |
+| `delete` | 删除笔记 | 支持云端 ID 或 `clientId` |
+| `listByDate` | 查询某日笔记 | 返回该日最多 50 条 |
+
+笔记类型包括 `diary`、`idea`、`attachment`、`scan`、`audio`、`boundless`。无边记默认使用 `boundless`。
+
+### 8.4 `recordService`
+
+集合：`records`、`pomodoroSessions`、`reports`。
+
+| action | 功能 | 说明 |
+| --- | --- | --- |
+| `createRecord` | 创建或更新每日生活记录 | 同一天记录存在时更新 |
+| `createPomodoro` | 创建番茄钟记录 | 可同步累计到每日记录和日程专注时长 |
+| `deletePomodoro` | 删除番茄钟记录 | 软删除 |
+| `getOverview` | 获取发现页概览 | 读取一周记录和用户目标 |
+| `getWeeklyReport` | 生成基础周报 | 可写入 `reports` |
+
+生活记录字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `date` | 日期 |
+| `studyMinutes` | 学习分钟数 |
+| `entertainmentMinutes` | 娱乐分钟数 |
+| `sportMinutes/exerciseMinutes` | 运动分钟数 |
+| `sleepHours` | 睡眠小时数 |
+| `mood` | 心情 |
+| `note` | 补充说明 |
+
+番茄钟字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `category` | `study/sport/entertainment/sleep` |
+| `durationMinutes` | 专注时长 |
+| `startedAt/endedAt` | 开始和结束时间 |
+| `scheduleId` | 可选关联日程 |
+| `completed` | 是否完成 |
+| `exitReason` | 结束原因 |
+
+### 8.5 `reminderService`
+
+集合：`schedules`。
+
+| action | 功能 | 说明 |
+| --- | --- | --- |
+| `scanDueReminders` | 扫描到期提醒 | 默认 action，也可由定时器触发 |
+| `timer` | 定时器触发别名 | 与扫描逻辑一致 |
+| `markReminderSent` | 标记提醒已发送 | 更新提醒发送状态 |
+
+定时触发配置：
+
+```json
+{
+  "name": "scanDueReminders",
+  "type": "timer",
+  "config": "0 */5 * * * * *"
+}
+```
+
+含义：每 5 分钟扫描一次到期提醒。
+
+### 8.6 `reportService`
+
+功能：AI 周报生成和分享摘要生成。依赖环境变量 `DEEPSEEK_API_KEY`。
+
+| action | 功能 |
+| --- | --- |
+| `generateWeeklyReport` | 根据统计、日程、笔记和番茄钟生成结构化周报 |
+| `generateShareSummary` | 生成周报分享摘要 |
+
+AI 周报输出结构：
+
+```js
+{
+  title,
+  summary,
+  highlights,
+  risks,
+  suggestions,
+  scheduleInsights,
+  noteInsights,
+  focusInsights,
+  nextWeekFocus,
+  shareText
+}
+```
+
+### 8.7 `speechService`
+
+功能：语音识别。依赖腾讯云 ASR 相关配置和 `tencentcloud-sdk-nodejs`。
+
+| action | 功能 |
+| --- | --- |
+| `recognize` | 识别语音文件，返回文本 |
+
+前端主要用于新建日程时的语音输入，再把识别文本交给 `scheduleService.parse` 解析成日程字段。
+
+### 8.8 `ocrCourseService`
+
+功能：课表图片 OCR 和课程结构化解析。依赖腾讯云 OCR、DeepSeek 和相关环境变量。
+
+| action | 功能 |
+| --- | --- |
+| `recognizeText` | 仅识别图片文字 |
+| 默认解析流程 | OCR 识别后调用 AI 解析课程 JSON |
+
+课程解析后可转换为本地课程和日程，供“课表与日程管理”“今日”“日历”使用。
+
+## 9. 本地缓存与降级
+
+`miniprogram/utils/storage.js` 定义了核心缓存键：
+
+| key | 用途 |
+| --- | --- |
+| `lifepilot_courses` | 本地课程 |
+| `lifepilot_schedules` | 本地日程 |
+| `lifepilot_records` | 本地生活记录和番茄钟记录 |
+| `lifepilot_diaries` | 历史日记兼容数据 |
+| `lifepilot_boundless_notes` | 无边记 |
+| `lifepilot_user_settings` | 用户设置 |
+
+降级策略：
+
+1. 页面先保证本地可读写。
+2. 保存日程、记录、笔记时先写本地，再异步调用云函数。
+3. 云函数失败时保留本地数据，并输出控制台警告。
+4. 云端数据拉取成功后，通过 `mergeSchedulesToStorage` 合并到本地，避免重复数据。
+5. 日程去重优先使用 `_id`、`clientId`、`cloudId`、`searchIndexId`。
+
+## 10. 数据库集合设计
+
+### 10.1 `users`
+
+保存用户身份、资料、目标和 AI 权限。
 
 主要字段：
 
-- `openid`：微信用户唯一标识。
-- `userId`：当前版本与 openid 一致。
-- `appid`、`unionid`：微信上下文信息。
-- `nickName`、`avatarUrl`：用户基础信息。
-- `school`、`major`、`grade`：校园身份信息。
-- `studyGoal`、`sportGoal`、`sleepGoal`、`entertainmentLimit`：个人目标。
-- `allowDiaryAI`、`allowNoteAI`、`allowRecordAI`、`allowReportAI`：AI 分析授权。
-- `theme`：主题配置。
-- `profileCompleted`：是否已完成首次基本信息录入。
-- `lastLoginAt`：最近登录时间。
-- `createdAt`、`updatedAt`：创建和更新时间。
+- `openid`
+- `userId`
+- `nickName`
+- `avatarUrl`
+- `school`
+- `major`
+- `grade`
+- `studyGoal`
+- `sportGoal`
+- `sleepGoal`
+- `entertainmentLimit`
+- `allowDiaryAI`
+- `allowNoteAI`
+- `allowRecordAI`
+- `allowReportAI`
+- `profileCompleted`
+- `theme`
+- `createdAt`
+- `updatedAt`
 
-### 8.2 schedules
+### 10.2 `schedules`
 
-日程集合用于存储课程、任务、会议、考试和个人安排。
-
-主要字段：
-
-- `openid`、`userId`：数据归属。
-- `clientId`：前端生成的客户端 ID，用于去重。
-- `title`、`type`、`status`、`priority`：基础信息。
-- `dateKey`、`year`、`month`、`day`：日期索引。
-- `startDateKey`、`endDateKey`、`startTime`、`endTime`：时间信息。
-- `startAt`、`endAt`：服务端日期对象。
-- `isAllDay`、`allDay`：全天事件标识。
-- `repeatRule`：重复规则。
-- `reminder`：提醒设置。
-- `location`、`url`、`note`：地点、链接和备注。
-- `source`、`color`：来源和颜色。
-- `focusRequired`、`focusMinutes`：专注相关字段。
-- `isCountdown`：倒数日预留。
-- `isDeleted`：软删除标识。
-- `searchIndexId`：搜索去重索引，优先使用云端 `_id`，本地离线数据使用稳定 `clientId`。
-- `createdAt`、`updatedAt`：创建和更新时间。
-
-### 8.3 notes
-
-无边记集合用于存储自由记录。
+保存用户手动创建或转换生成的日程。
 
 主要字段：
 
-- `openid`、`userId`、`clientId`。
-- `date`：所属日期。
-- `type`：记录类型，当前以 `boundless` 为主。
-- `content`：正文内容。
-- `assets`：图片或附件预留。
-- `tags`：标签预留。
-- `visibleToAI`：是否允许参与 AI 分析。
-- `createdAt`、`updatedAt`。
+- `openid`
+- `clientId`
+- `title`
+- `type`
+- `status`
+- `priority`
+- `location`
+- `dateKey`
+- `startDateKey`
+- `endDateKey`
+- `startTime`
+- `endTime`
+- `isAllDay/allDay`
+- `repeatRule`
+- `excludedDates`
+- `reminder`
+- `url`
+- `note`
+- `source`
+- `color`
+- `focusRequired`
+- `focusMinutes`
+- `isCountdown`
+- `isDeleted`
 
-### 8.4 records
+### 10.3 `courses`
 
-生活记录集合用于存储每日状态。
+保存课表识别或导入后的课程数据。当前主要由课表 OCR 和本地转换流程使用。
+
+建议字段：
+
+- `openid`
+- `courseName`
+- `teacher`
+- `classroom`
+- `dateKey`
+- `weekday`
+- `startTime`
+- `endTime`
+- `startWeek`
+- `endWeek`
+- `weekType`
+- `semester`
+- `color`
+- `isDeleted`
+
+### 10.4 `records`
+
+保存每日生活记录，也会接收番茄钟带来的学习/运动/娱乐增量。
 
 主要字段：
 
-- `openid`、`userId`。
-- `date`。
-- `studyMinutes`。
-- `entertainmentMinutes`。
-- `exerciseMinutes`、`sportMinutes`。
-- `sleepHours`。
-- `mood`。
-- `note`。
-- `createdAt`、`updatedAt`。
+- `openid`
+- `date`
+- `studyMinutes`
+- `entertainmentMinutes`
+- `sportMinutes`
+- `exerciseMinutes`
+- `sleepHours`
+- `mood`
+- `note`
+- `createdAt`
+- `updatedAt`
 
-### 8.5 pomodoroSessions
+### 10.5 `pomodoroSessions`
 
-番茄钟集合用于存储专注会话。
-
-主要字段：
-
-- `openid`、`userId`。
-- `scheduleId`。
-- `category`。
-- `durationMinutes`。
-- `startedAt`、`endedAt`。
-- `completed`。
-- `exitReason`。
-- `createdAt`。
-
-### 8.6 reports
-
-周报集合用于缓存或保存周期性复盘结果。
+保存番茄钟专注记录。
 
 主要字段：
 
-- `openid`、`userId`。
-- `weekStart`、`weekEnd`。
-- `studyTotal`。
-- `entertainmentTotal`。
-- `sportTotal`。
-- `avgSleep`。
-- `scores`。
-- `aiSummary`。
-- `suggestions`。
-- `createdAt`。
+- `openid`
+- `clientId`
+- `scheduleId`
+- `category`
+- `durationMinutes`
+- `startedAt`
+- `endedAt`
+- `completed`
+- `exitReason`
+- `isDeleted`
+- `createdAt`
 
-## 9. 权限与隐私设计
+### 10.6 `notes`
 
-### 9.1 数据隔离
+保存无边记、日记、灵感和附件记录。
 
-所有云函数都通过 `cloud.getWXContext()` 获取当前用户 openid，读写数据时必须带上 openid 条件。这样可以保证用户只能访问自己的日程、记录、无边记和周报。
+主要字段：
 
-### 9.2 软删除
+- `openid`
+- `date`
+- `type`
+- `clientId`
+- `content`
+- `assets`
+- `tags`
+- `visibleToAI`
+- `createdAt`
+- `updatedAt`
 
-日程删除采用软删除方式，将 `isDeleted` 设置为 `true`，而不是立即物理删除。这样可以为后续误删恢复、同步冲突处理和审计提供空间。
+### 10.7 `reports`
 
-### 9.3 AI 授权
+保存周报结果。
 
-与 AI 分析相关的数据默认应遵循最小授权原则：
+主要字段：
 
-- AI 读取日记默认关闭。
-- AI 读取无边记默认关闭。
-- AI 读取生活记录需要用户授权。
-- 周报生成可以基于基础数值记录进行，但若需要读取主观文本，应明确提示用户。
+- `openid`
+- `weekStart`
+- `weekEnd`
+- `studyTotal`
+- `entertainmentTotal`
+- `sportTotal`
+- `avgSleep`
+- `scores`
+- `aiSummary`
+- `suggestions`
+- `createdAt`
 
-### 9.4 敏感逻辑后置
+### 10.8 `schemaVersions`
 
-后续若接入大模型、语音识别、第三方课程表解析或其他外部服务，密钥和 token 必须放在云函数环境变量中，不能写入小程序前端代码。
+保存云端集合初始化版本。
 
-## 10. 典型任务流程
+当前版本：`2026-05-31-cloud-schema-v1`。
 
-### 10.1 查看今天安排
+## 11. 主要业务流程
 
-```text
-打开小程序 -> 登录或自动进入 -> 今日日程 -> 查看选中日期 -> 查看下方日程列表
-```
-
-### 10.2 新建日程
-
-```text
-今日日程点击添加 -> 填写标题、地点、时间、提醒、备注 -> 点击添加 -> 返回首页查看日程
-```
-
-### 10.3 搜索日程
-
-```text
-今日日程点击搜索 -> 输入关键词 -> 查看结果列表 -> 点击目标日程查看详情
-```
-
-### 10.4 查看某一天完整记录
-
-```text
-进入日历视图 -> 点击某个日期 -> 打开底部浮层 -> 查看详细日程 -> 切换到无边记或灵感记录
-```
-
-### 10.5 记录今日状态
+### 11.1 登录与资料初始化
 
 ```text
-发现或我的进入生活记录 -> 调整学习/娱乐/运动/睡眠数值 -> 输入心情或备注 -> 保存今日记录
+打开小程序
+ -> 读取本地登录状态
+ -> 未登录则进入登录页
+ -> 调用 userService.login
+ -> 新用户创建 users 记录
+ -> 同步 globalData.user
+ -> 资料未完成则进入我的页
+ -> 资料完成则进入今日页
 ```
 
-### 10.6 开始专注
+### 11.2 新建日程
 
 ```text
-发现页点击番茄钟 -> 选择专注任务或类型 -> 进入计时页面 -> 完成后保存专注记录
+今日/日历点击新增
+ -> scheduleAdd 填写表单
+ -> 前端校验标题和时间
+ -> 写入本地 lifepilot_schedules
+ -> 调用 scheduleService.create
+ -> 返回上一页刷新
 ```
 
-### 10.7 生成周报
+### 11.3 重复日程单次编辑
 
 ```text
-发现页进入周报 -> 读取本周记录 -> 查看图表和状态建议 -> 按需授权无边记参与分析
+点击重复日程中的某一次
+ -> 进入编辑页
+ -> 修改后选择仅本次
+ -> 原重复日程加入 excludedDates
+ -> 创建一个单独的新日程
+ -> 今日和日历同步刷新
 ```
 
-### 10.8 首次登录录入基本信息
+### 11.4 查看某日完整记录
 
 ```text
-首次登录 -> 微信授权昵称和头像 -> 填写学校/专业/年级/个人目标 -> 保存资料 -> 进入今日日程
+进入日历页
+ -> 点击日期
+ -> 打开底部浮层
+ -> 查询当日日程和无边记
+ -> 在浮层内切换日程/无边记/灵感
 ```
 
-### 10.9 修改个人信息并保存
+### 11.5 创建无边记
 
 ```text
-我的 -> 编辑个人信息 -> 修改学校/专业/年级/目标 -> 点击保存 -> 云端更新 -> 页面刷新展示最新信息
+点击无边记入口
+ -> 进入 boundlessNote
+ -> 输入文本或添加附件
+ -> 保存到本地 boundless_notes
+ -> 调用 noteService.create
+ -> 返回上一页刷新
 ```
 
-### 10.10 退出登录
+### 11.6 创建生活记录
 
 ```text
-我的 -> 点击退出登录 -> 二次确认 -> 清理本地登录态 -> 返回登录页
+发现模块/生活记录入口
+ -> 进入 recordModule
+ -> 填写时长、时间和备注
+ -> 写入 lifepilot_records
+ -> 调用 recordService.createRecord
+ -> 发现页重新计算趋势
 ```
 
-## 11. 本轮新增功能与修订需求
+### 11.7 番茄钟专注
 
-本节记录当前版本暴露出的功能缺口和需要补充的开发任务。它们应作为下一轮迭代的高优先级内容。
+```text
+发现页点击番茄钟
+ -> 选择专注模块
+ -> 进入计时页
+ -> 开始/暂停/结束
+ -> 本地生成 pomodoro 记录
+ -> 调用 recordService.createPomodoro
+ -> 追加到每日记录
+ -> 如有关联日程则增加 focusMinutes
+```
 
-### 11.1 首次登录基本信息录入
+### 11.8 课表图片导入
 
-当前问题：
+```text
+我的页选择课表导入
+ -> 选择图片和 OCR 模式
+ -> 调用 ocrCourseService
+ -> OCR 提取文字
+ -> AI 解析课程结构
+ -> 用户确认后写入本地课程/日程
+ -> 可调用 scheduleService.create 同步云端
+```
 
-- 新用户第一次登录时，只能获取微信昵称和头像。
-- 学校、专业、年级、学习目标、运动目标、睡眠目标等信息仍依赖默认值或硬编码。
-- 这会导致“我的”页面和周报目标计算缺少用户真实信息。
+### 11.9 AI 周报生成
 
-目标方案：
+```text
+进入周报页
+ -> 汇总 records、schedules、notes、pomodoro
+ -> 基础周报可由 recordService.getWeeklyReport 生成
+ -> AI 周报调用 reportService.generateWeeklyReport
+ -> DeepSeek 返回结构化 JSON
+ -> 页面展示总结、亮点、风险、建议和下周重点
+```
 
-- 登录成功后判断 `profileCompleted`。
-- 若为新用户或资料未完成，进入基本信息录入流程。
-- 昵称和头像优先使用微信资料，其他字段由用户填写。
-- 保存后调用 `userService.updateProfile`，并将 `profileCompleted` 设置为 `true`。
+## 12. 部署与运行
 
-验收标准：
+### 12.1 使用微信开发者工具打开
 
-- 首次登录用户必须看到资料录入界面。
-- 资料保存成功后进入首页。
-- 再次进入小程序不重复弹出录入流程。
-- 云端 `users` 集合能看到用户填写的学校、专业、年级和目标数据。
+1. 打开微信开发者工具。
+2. 选择“导入项目”。
+3. 项目目录选择：
 
-### 11.2 非一级页面退出方式
+```text
+D:\SE HM\用户交互设计\final_project\lifepilot-miniprogram
+```
 
-当前问题：
+4. AppID 使用 `project.config.json` 中的：
 
-- 搜索、番茄钟选择、番茄钟计时、无边记等页面进入后退出路径不够明确。
-- 自定义导航栏页面如果没有返回按钮，用户容易感到“被困在页面中”。
+```text
+wx349e90f4e43c9127
+```
 
-目标方案：
+5. 确认小程序目录为 `miniprogram/`，云函数目录为 `cloudfunctions/`。
 
-- 搜索页增加返回或取消按钮。
-- 番茄钟选择页增加返回按钮。
-- 番茄钟计时页增加退出专注按钮，并提供二次确认。
-- 无边记编辑页在返回前检查未保存内容。
-- 所有非 tabBar 页面统一支持 `wx.navigateBack` 或 `wx.reLaunch` 的兜底路径。
+### 12.2 云开发环境
 
-验收标准：
+当前代码中云环境 ID：
 
-- 从任何非一级页面都能在一步内找到退出入口。
-- 正在计时的番茄钟退出前必须确认。
-- 有未保存内容的无边记不能被静默丢弃。
+```js
+cloud1-d0gqsqpco88878b2f
+```
 
-### 11.3 退出当前账号
+需要在微信开发者工具中确认：
 
-当前问题：
+- 已开通云开发。
+- 当前环境 ID 与 `app.js` 中 `CLOUD_ENV` 一致。
+- 云数据库权限允许云函数按 openid 访问用户数据。
 
-- 用户不能主动退出当前账号。
-- 如果多人共用设备，无法切换到其他微信用户或清理本地状态。
-
-目标方案：
-
-- “我的”页面增加退出登录按钮。
-- 点击后弹出确认框。
-- 确认后清理本地登录态、全局用户状态和必要缓存。
-- 使用 `wx.reLaunch` 返回登录页。
-
-验收标准：
-
-- 退出后无法直接进入首页。
-- 再次进入需要重新执行登录流程。
-- 云端历史数据不被删除。
-
-### 11.4 修改个人信息并保存
-
-当前问题：
-
-- 用户资料展示后不能完整编辑保存。
-- 修改目标或个人信息后，周报和发现页仍可能读取旧值或默认值。
-
-目标方案：
-
-- “我的”页面增加编辑状态。
-- 支持修改学校、专业、年级、学习目标、运动目标、睡眠目标、娱乐限制和 AI 授权。
-- 点击保存后调用 `userService.updateProfile`。
-- 保存成功后刷新 `getApp().globalData.user` 和页面展示。
-
-验收标准：
-
-- 修改后的资料刷新页面后仍然保留。
-- 周报和发现页使用最新目标值。
-- 保存失败时不能清空用户已输入内容。
-
-### 11.5 今日与日历日程索引关联
-
-当前问题：
-
-- 同一条日程可能同时出现在今日视图和日历视图。
-- 搜索时如果按页面来源区分，可能出现“同一个日程被搜索到两次”的问题。
-
-目标方案：
-
-- 今日视图和日历视图都使用同一份 `schedules` 数据源。
-- 每条日程必须拥有稳定唯一索引：云端 `_id` 优先，本地离线数据使用 `clientId`。
-- 搜索聚合时按 `searchIndexId` 去重。
-- 搜索结果不展示“今日”或“日历”来源差异，只展示日程本身。
-
-验收标准：
-
-- 同一日程在今日页和日历页显示时，搜索只返回一条。
-- 删除或编辑某条日程后，今日页和日历页状态同步。
-- 本地缓存和云端数据合并后不出现重复日程。
-
-### 11.6 搜索结果标签简化
-
-当前问题：
-
-- 搜索结果来源如果细分过多，会让用户难以理解。
-
-目标方案：
-
-- 搜索结果标签只保留两类：`日程` 和 `无边记`。
-- 日程包括课程、会议、考试、任务和个人安排。
-- 无边记包括自由记录、灵感和日记类内容。
-
-验收标准：
-
-- 搜索结果列表中不存在“今日日程”“日历日程”“课程”“任务”等额外标签。
-- 标签文案统一、短小、稳定。
-
-### 11.7 番茄钟空白页修复
-
-当前问题：
-
-- 从番茄钟选择页点击选项后，进入计时页面显示错误或空白。
-
-目标方案：
-
-- 检查 `pomodoroSelect` 到 `pomodoroTimer` 的跳转参数。
-- `pomodoroTimer.onLoad` 对参数做默认值和错误兜底。
-- 页面至少展示任务标题、专注时长、开始/暂停/结束按钮和返回入口。
-- 参数缺失时展示错误状态，不允许空白。
-
-验收标准：
-
-- 点击任意番茄钟选项后能进入正常计时界面。
-- 控制台不出现阻断渲染的异常。
-- 参数缺失时显示可理解的错误提示和返回按钮。
-
-### 11.8 项目统一更名为 CampusMind
-
-当前问题：
-
-- 文档和产品名称已使用 `CampusMind`，但部分工程名、本地缓存键、历史代码命名仍保留 `lifepilot` 或 `LifePilot`。
-
-目标方案：
-
-- 用户可见名称统一为 `CampusMind`。
-- `app.json` 中 `navigationBarTitleText` 保持 `CampusMind`。
-- 文档、页面文案、提交说明统一使用 `CampusMind`。
-- 本地缓存键可以暂时保留 `lifepilot_*` 以避免旧数据丢失；若后续迁移，需要写缓存迁移脚本。
-- 仓库目录是否更名需单独处理，因为会影响微信开发者工具项目配置。
-
-验收标准：
-
-- 小程序界面不再出现 `LifePilot`。
-- 技术文档不再把 `LifePilot` 作为工程代号。
-- 如修改缓存键，旧用户数据必须能迁移或兼容读取。
-
-## 12. 当前实现范围
-
-当前已完成或已具备代码基础的内容：
-
-- 微信小程序基础工程结构。
-- 自定义底部导航。
-- 登录页和用户云函数。
-- 今日日程月历页。
-- 日期选择、日程展示和无日程状态。
-- 日程项左滑删除。
-- 搜索页和云端关键词检索。
-- 新建日程表单页。
-- 重复规则、提醒、备注、URL 和长文本输入字段。
-- 日历月视图。
-- 日期浮层、浮层拖拽和多内容切换。
-- 无边记创建、编辑、删除和按日期查询。
-- 发现页四象限布局。
-- 学习、运动、娱乐、睡眠入口。
-- 生活记录页。
-- 番茄钟选择和计时页面。
-- 我的页面。
-- 隐私与 AI 授权开关。
-- 周报页多指标展示。
-- `userService`、`scheduleService`、`noteService`、`recordService` 四个服务型云函数。
-- 前端统一云函数调用层 `utils/cloud.js`。
-- 本地缓存与离线降级工具 `utils/storage.js`。
-- 本地数据概览计算工具 `utils/analytics.js`。
-- 当前尚未完成首次登录基本信息录入、退出登录、个人信息编辑保存、非一级页面统一返回规范和番茄钟空白页修复。
-
-## 13. 部署与验证方案
-
-### 13.1 云函数部署
+### 12.3 云函数部署
 
 需要部署的云函数：
 
@@ -1076,107 +1137,346 @@ userService
 scheduleService
 noteService
 recordService
+reminderService
+reportService
+speechService
+ocrCourseService
 ```
 
-部署后，应在微信开发者工具中分别测试登录、日程、无边记、生活记录和周报接口。
+部署建议：
 
-### 13.2 接口测试样例
+1. 在微信开发者工具中右键每个云函数目录。
+2. 选择“上传并部署：云端安装依赖”。
+3. OCR 和语音服务依赖 `tencentcloud-sdk-nodejs`，必须安装依赖。
+4. 部署 `reminderService` 时确认定时触发器配置已生效。
 
-登录：
+### 12.4 环境变量配置
 
-```json
-{
-  "action": "login",
-  "nickName": "Test"
-}
-```
+如需启用 AI、OCR、语音能力，需要配置相关环境变量。
 
-创建日程：
-
-```json
-{
-  "action": "create",
-  "title": "Math review",
-  "dateKey": "2026-06-01",
-  "startDateKey": "2026-06-01",
-  "startTime": "10:00",
-  "endTime": "11:00"
-}
-```
-
-查询某日日程：
-
-```json
-{
-  "action": "listByDate",
-  "date": "2026-06-01"
-}
-```
-
-创建无边记：
-
-```json
-{
-  "action": "create",
-  "date": "2026-06-01",
-  "content": "A new boundless note",
-  "type": "boundless"
-}
-```
-
-创建生活记录：
-
-```json
-{
-  "action": "createRecord",
-  "date": "2026-06-01",
-  "studyMinutes": 60,
-  "sportMinutes": 30,
-  "sleepHours": 7.5
-}
-```
-
-更新个人资料：
-
-```json
-{
-  "action": "updateProfile",
-  "school": "CampusMind University",
-  "major": "Software Engineering",
-  "grade": "2026",
-  "studyGoal": 6,
-  "sportGoal": 3,
-  "sleepGoal": 8,
-  "entertainmentLimit": 120,
-  "profileCompleted": true
-}
-```
-
-### 13.3 前端验证清单
-
-| 验证项 | 预期结果 |
+| 能力 | 可能需要的配置 |
 | --- | --- |
-| 首次进入登录页 | 能成功进入并创建用户记录，新用户进入基本信息录入 |
-| 保存基本信息 | 用户资料写入云端，再次进入不重复录入 |
-| 打开今日页 | 能显示当前月和选中日期 |
-| 新建日程 | 保存后首页和日历页均可看到 |
-| 删除日程 | 页面消失，云端记录被软删除 |
-| 搜索关键词 | 返回匹配日程和无边记，同一日程只出现一次 |
-| 搜索结果标签 | 只显示“日程”或“无边记” |
-| 日历点击日期 | 打开底部浮层 |
-| 新建无边记 | 对应日期可查看 |
-| 保存生活记录 | 发现页概览更新 |
-| 进入番茄钟 | 选择任意选项后计时页不为空白 |
-| 完成番茄钟 | 专注记录进入统计 |
-| 非一级页面返回 | 搜索、番茄钟、无边记等页面均有明确退出入口 |
-| 修改个人信息 | 保存后刷新仍展示新内容 |
-| 退出登录 | 清理本地登录态并返回登录页 |
-| 查看周报 | 图表和建议正常显示 |
-| 关闭网络或云端失败 | 页面使用本地缓存降级 |
+| DeepSeek 日程解析 | `DEEPSEEK_API_KEY` |
+| DeepSeek 周报生成 | `DEEPSEEK_API_KEY` |
+| 腾讯云 OCR | 腾讯云 SecretId、SecretKey、OCR 区域等 |
+| 腾讯云 ASR | 腾讯云 SecretId、SecretKey、ASR 区域等 |
+| 模板消息提醒 | 小程序订阅消息模板 ID |
 
-## 14. 可用性评估方案
+如果未配置这些变量，核心日程、记录、无边记、发现页仍可使用，但 AI 解析、AI 周报、OCR、语音识别和提醒发送可能失败。
 
-### 14.1 测试任务
+### 12.5 需要额外配置的云函数 API 与处理时间
+
+下列云函数依赖外部 API、订阅消息模板或定时触发器。部署演示前应优先检查这些配置，否则对应功能会返回错误或降级为手动流程。
+
+| 云函数 | 依赖 API/服务 | 必要配置 | 典型处理时间 | 代码超时/扫描窗口 | 失败影响 |
+| --- | --- | --- | --- | --- | --- |
+| `scheduleService.parse` | DeepSeek Chat Completions | `DEEPSEEK_API_KEY` | 2-8 秒 | HTTPS 请求超时 20 秒 | 无法把自然语言解析成日程，用户仍可手动填写 |
+| `reportService.generateWeeklyReport` | DeepSeek Chat Completions | `DEEPSEEK_API_KEY` | 3-12 秒 | HTTPS 请求超时 20 秒 | 无法生成 AI 周报，基础统计仍可由 `recordService.getWeeklyReport` 提供 |
+| `reportService.generateShareSummary` | DeepSeek Chat Completions | `DEEPSEEK_API_KEY` | 3-12 秒 | 复用 AI 周报生成流程 | 无法生成分享摘要 |
+| `ocrCourseService` | 腾讯云 OCR + DeepSeek Chat Completions | `TENCENT_SECRET_ID`、`TENCENT_SECRET_KEY`、解析课程时还需 `DEEPSEEK_API_KEY` | 仅 OCR 1-5 秒；OCR + AI 解析 5-15 秒 | 代码未显式设置请求超时，受云函数运行时和外部 API 响应影响 | 无法识别课表图片；可改为手动录入课程 |
+| `speechService.recognize` | 腾讯云 ASR 一句话识别 | `ASR_SECRET_ID`、`ASR_SECRET_KEY`；可选 `ASR_REGION`、`ASR_PROJECT_ID`、`ASR_ENGINE_MODEL`、`SPEECH_RECOGNITION_PROVIDER` | 1-6 秒 | 代码未显式设置请求超时，受云函数运行时和腾讯 ASR 响应影响 | 无法将语音转文字；用户仍可手动输入 |
+| `reminderService.scanDueReminders` | 微信订阅消息 `cloud.openapi.subscribeMessage.send` | 日程 `reminder.templateId`、用户订阅状态 `reminder.subscribed`、定时触发器 | 每次扫描通常 1 秒内；发送数量多时随 due 数增长 | 定时触发器每 5 分钟执行一次；扫描最近 10 分钟提醒窗口；每次最多读取 100 条日程 | 无法推送提醒，但日程本身不受影响 |
+
+#### DeepSeek 配置说明
+
+项目中有两处使用 DeepSeek：
+
+1. `scheduleService.parse`：把一句话日程描述解析为标题、日期、开始时间、结束时间、地点、提醒和重复规则。
+2. `reportService.generateWeeklyReport` / `generateShareSummary`：根据本周统计、日程、无边记和番茄钟数据生成周报。
+3. `ocrCourseService`：在 OCR 得到课表文字后，调用 DeepSeek 把原始文字整理成课程 JSON。
+
+需要在对应云函数环境变量中配置：
+
+```text
+DEEPSEEK_API_KEY=你的 DeepSeek API Key
+```
+
+当前代码请求地址：
+
+```text
+https://api.deepseek.com/chat/completions
+```
+
+当前模型：
+
+```text
+deepseek-chat
+```
+
+处理时间建议：
+
+- 普通日程解析文本较短，通常按 2-8 秒估算。
+- 周报输入包含统计、日程、笔记和番茄钟数据，通常按 3-12 秒估算。
+- 代码中 DeepSeek HTTPS 请求设置了 20 秒超时；如果 20 秒内没有返回，会进入失败逻辑。
+- 页面侧应展示加载状态，避免用户重复点击生成。
+
+#### 腾讯云 OCR 配置说明
+
+`ocrCourseService` 用于课表图片识别。处理分两步：
+
+1. 调用腾讯云 OCR 识别图片文字。
+2. 如果 action 不是 `recognizeText`，继续调用 DeepSeek 将 OCR 文本解析为课程数组。
+
+需要配置：
+
+```text
+TENCENT_SECRET_ID=腾讯云 SecretId
+TENCENT_SECRET_KEY=腾讯云 SecretKey
+DEEPSEEK_API_KEY=你的 DeepSeek API Key
+```
+
+OCR 区域和端点在代码中固定为：
+
+```text
+region: ap-guangzhou
+endpoint: ocr.tencentcloudapi.com
+```
+
+支持的 OCR 模式：
+
+| mode | 腾讯云 Action | 使用场景 |
+| --- | --- | --- |
+| `printed` | `GeneralBasicOCR` | 普通印刷文字，速度较快 |
+| `accurate` | `GeneralAccurateOCR` | 默认模式，准确率更高 |
+| `handwriting` | `GeneralHandwritingOCR` | 手写课表或手写备注 |
+
+处理时间建议：
+
+- 仅识别文字：通常 1-5 秒。
+- 识别文字并解析课程：通常 5-15 秒。
+- 图片越大、文字越密集、课程越多，处理时间越长。
+- 代码未对 OCR 请求显式设置独立超时，实际受腾讯云 API、DeepSeek API 和云函数运行时限制影响。
+
+#### 腾讯云 ASR 配置说明
+
+`speechService.recognize` 用于日程语音输入。前端上传音频后，云函数先获取临时文件 URL，再调用腾讯云 ASR 一句话识别。
+
+需要配置：
+
+```text
+ASR_SECRET_ID=腾讯云 SecretId
+ASR_SECRET_KEY=腾讯云 SecretKey
+```
+
+可选配置：
+
+```text
+ASR_REGION=腾讯云 ASR 区域
+ASR_PROJECT_ID=项目 ID，默认 0
+ASR_ENGINE_MODEL=识别模型，默认 16k_zh
+SPEECH_RECOGNITION_PROVIDER=tencent
+```
+
+支持的音频格式会被标准化为：
+
+```text
+wav, pcm, ogg-opus, speex, silk, mp3, m4a, aac, amr
+```
+
+处理时间建议：
+
+- 60 秒以内的短语音通常按 1-6 秒估算。
+- 当前无边记录音上限为 60 秒；日程语音输入也建议控制在短句范围内。
+- 如果未配置 ASR 密钥，云函数返回 `501`。
+- 如果没有识别出文本，云函数返回 `204`。
+
+#### 订阅提醒配置说明
+
+`reminderService` 用于扫描并发送日程提醒。它依赖微信订阅消息能力，不是普通 HTTP API。
+
+需要满足：
+
+1. 用户已订阅对应消息模板。
+2. 日程 `reminder.enabled` 为 `true`。
+3. 日程 `reminder.subscribed` 为 `true`。
+4. 日程 `reminder.templateId` 已配置。
+5. 日程 `reminder.remindAt` 是可解析时间。
+6. `reminder.sent` 不是 `true`。
+
+定时触发器配置为：
+
+```json
+{
+  "name": "scanDueReminders",
+  "type": "timer",
+  "config": "0 */5 * * * * *"
+}
+```
+
+处理时间和扫描规则：
+
+- 每 5 分钟自动扫描一次。
+- 每次读取最多 100 条未删除日程。
+- 只发送当前时间往前 10 分钟窗口内到期的提醒。
+- 成功发送后写入 `reminder.sent=true` 和 `lastSentAt`。
+- 发送失败时写入 `lastCheckedAt` 和 `lastError`。
+
+#### 云函数超时配置建议
+
+微信云函数自身还需要在云开发控制台设置合理的执行超时时间。建议如下：
+
+| 云函数 | 建议超时时间 | 理由 |
+| --- | --- | --- |
+| `userService` | 5-10 秒 | 主要是数据库读写 |
+| `scheduleService` | 10 秒；启用 `parse` 时建议 30 秒 | 普通日程读写较快，AI 解析最多可能接近 20 秒 |
+| `noteService` | 5-10 秒 | 主要是数据库读写和附件元数据保存 |
+| `recordService` | 5-10 秒 | 主要是记录、番茄钟和统计读写 |
+| `reminderService` | 10-20 秒 | 需要扫描和发送订阅消息 |
+| `reportService` | 30 秒 | AI 周报请求可能接近 20 秒 |
+| `speechService` | 20-30 秒 | 需要获取临时文件 URL 并调用 ASR |
+| `ocrCourseService` | 30-60 秒 | OCR + AI 解析链路最长 |
+
+演示建议：
+
+- 普通日程、记录、无边记、发现页和基础周报作为稳定主流程。
+- AI 周报、语音识别、课表 OCR 和订阅提醒作为增强能力，演示前先单独测试云函数。
+- 对耗时超过 3 秒的功能，页面应保持 loading 状态并禁止重复提交。
+
+### 12.6 数据库初始化
+
+首次进入小程序或登录后，`app.js` 会调用：
+
+```js
+api.user.init()
+```
+
+该接口会尝试创建以下集合：
+
+```text
+users
+courses
+schedules
+records
+pomodoroSessions
+notes
+reports
+schemaVersions
+```
+
+如果集合已存在，云函数会跳过创建并继续执行。
+
+## 13. 操作手册
+
+### 13.1 查看今天安排
+
+1. 打开小程序并登录。
+2. 默认进入“今日”页。
+3. 查看当前选中日期下方的日程列表。
+4. 点击其他日期可切换当天安排。
+
+### 13.2 新增日程
+
+1. 在“今日”页点击加号。
+2. 填写标题。
+3. 选择开始时间和结束时间。
+4. 可选填地点、提醒、重复、URL 和备注。
+5. 点击保存。
+6. 返回今日页查看新增日程。
+
+### 13.3 编辑日程
+
+1. 在今日页或日历浮层点击日程。
+2. 修改内容。
+3. 点击保存。
+4. 如果是重复日程，选择修改本次或全部。
+
+### 13.4 删除日程
+
+1. 在日程列表中左滑目标日程。
+2. 点击删除。
+3. 如果是重复日程，选择删除本次或删除全部。
+
+### 13.5 搜索事项
+
+1. 在今日页点击搜索。
+2. 输入关键词。
+3. 查看搜索结果。
+4. 点击结果查看或处理。
+
+### 13.6 查看月历
+
+1. 切换到底部第二个“日历”入口。
+2. 使用左右按钮切换月份。
+3. 点击日期打开底部浮层。
+4. 查看该日详细安排和无边记。
+
+### 13.7 记录无边记
+
+1. 在今日页、日历页或“我的”页进入无边记。
+2. 输入文字。
+3. 可添加图片、位置、录音或扫描文本。
+4. 点击保存。
+5. 历史记录可在无边记列表查看。
+
+### 13.8 记录生活状态
+
+1. 从发现页模块详情或“我的”页进入生活记录。
+2. 选择学习、运动、娱乐或睡眠。
+3. 填写时长、时间和备注。
+4. 保存后返回发现页查看趋势。
+
+### 13.9 使用番茄钟
+
+1. 在发现页点击番茄钟入口。
+2. 选择专注模块或任务。
+3. 点击开始。
+4. 可暂停、继续或结束。
+5. 结束后记录会进入统计。
+
+### 13.10 查看发现页统计
+
+1. 切换到底部“发现”入口。
+2. 查看本周总时长和活跃模块。
+3. 点击模块卡片查看详情。
+4. 下拉刷新更新数据。
+
+### 13.11 查看周报
+
+1. 从“我的”页或发现页进入周报。
+2. 查看本周学习、娱乐、运动和睡眠统计。
+3. 查看建议和下周重点。
+4. 若配置 AI 服务，可生成 AI 周报。
+
+### 13.12 导入课表
+
+1. 进入“我的”页。
+2. 点击课表导入相关入口。
+3. 选择课表图片。
+4. 等待 OCR 和 AI 解析。
+5. 检查识别课程。
+6. 确认后写入课程/日程。
+
+### 13.13 编辑个人资料和权限
+
+1. 进入“我的”页。
+2. 修改学校、专业、年级和目标。
+3. 设置是否允许 AI 使用记录、笔记或周报数据。
+4. 点击保存。
+
+## 14. 测试与验收清单
+
+| 模块 | 验收项 |
+| --- | --- |
+| 登录 | 新用户可创建用户记录，老用户可直接进入首页 |
+| 资料 | 个人资料保存后刷新仍保留 |
+| 今日 | 可查看当天日程，可切换日期 |
+| 新建日程 | 标题必填，结束时间不能早于开始时间 |
+| 编辑日程 | 普通日程可保存，重复日程可选择本次/全部 |
+| 删除日程 | 普通日程可删除，重复日程可选择本次/全部 |
+| 搜索 | 输入关键词后能搜索日程和课程 |
+| 日历 | 点击日期能打开浮层并展示详情 |
+| 无边记 | 文本和附件可保存，未保存离开有提醒 |
+| 生活记录 | 记录保存后发现页统计更新 |
+| 番茄钟 | 开始、暂停、结束流程正常，结束后生成记录 |
+| 周报 | 有记录时生成统计，无记录时展示空状态或默认建议 |
+| OCR | 配置环境变量后可识别课表图片 |
+| 语音 | 配置环境变量后可识别语音文本 |
+| 提醒 | 定时扫描触发器正常，提醒发送后可标记已发送 |
+| 离线降级 | 云端失败时本地记录不丢失 |
+
+## 15. 可用性评估方案
+
+### 15.1 测试任务
 
 为了验证设计是否满足用户需求，可进行轻量用户测试。建议每位测试者完成以下任务：
 
@@ -1191,7 +1491,7 @@ recordService
 9. 修改个人信息后退出并重新进入，检查信息是否保留。
 10. 从搜索页、番茄钟页和无边记页返回上一页。
 
-### 14.2 评价指标
+### 15.2 评价指标
 
 | 指标 | 观察方式 |
 | --- | --- |
@@ -1205,7 +1505,7 @@ recordService
 | 退出可见性 | 用户是否能快速找到返回和退出入口 |
 | 数据一致性 | 同一日程是否在搜索、今日、日历中保持一致 |
 
-### 14.3 访谈问题
+### 15.3 访谈问题
 
 - 打开首页后，你能否快速知道今天要做什么？
 - 新建日程时，哪些字段是必要的，哪些字段让你觉得负担较重？
@@ -1216,9 +1516,9 @@ recordService
 - 首次登录填写资料时，哪些字段让你觉得必要，哪些字段可以以后再填？
 - 你是否能在每个二级页面中快速找到返回或退出方式？
 
-## 15. 风险与改进方向
+## 16. 风险与改进方向
 
-### 15.1 当前风险
+### 16.1 当前风险
 
 | 风险 | 说明 | 应对方案 |
 | --- | --- | --- |
@@ -1231,7 +1531,7 @@ recordService
 | 资料仍有硬编码 | 首次登录资料未录入时使用默认值 | 增加资料录入和编辑保存流程 |
 | 搜索重复结果 | 今日和日历复用同一日程时可能重复命中 | 使用 `searchIndexId` 去重 |
 
-### 15.2 后续功能优先级
+### 16.2 后续功能优先级
 
 第一优先级：
 
@@ -1263,34 +1563,18 @@ recordService
 - 桌面组件或小程序组件。
 - 多端同步与导出。
 
-## 16. 本地微信小程序开发提示词
+## 17. 当前限制与改进建议
 
-下面是一段可直接用于本地微信小程序开发 agent 的提示词，适合在已有 `CampusMind` 项目目录中继续实现本轮修订需求：
+1. 根目录现有 README 在终端环境中出现中文乱码，建议后续统一为 UTF-8 编码。
+2. AI 日程解析、AI 周报、语音识别、OCR 都依赖外部环境变量，演示前需提前配置。
+3. 当前本地缓存键仍使用 `lifepilot_*`，产品名已是 CampusMind；若后续重命名缓存键，需要写迁移逻辑。
+4. 部分详情页依赖本地统计，云端和本地数据合并策略需要持续验证，避免重复记录。
+5. 提醒服务需要订阅消息模板配置，否则只能完成扫描和状态标记，无法真正推送消息。
+6. 课程导入后的用户确认流程可以继续增强，避免 OCR 误识别直接写入日程。
+7. 建议为搜索结果统一只显示“日程”和“无边记”两类标签，降低理解成本。
+8. 建议补充自动化测试或手动测试脚本，覆盖登录、日程、重复规则、无边记、番茄钟和周报。
 
-```text
-你是一个熟悉微信小程序、微信云开发、Skyline / glass-easel、WXML/WXSS/JS 和本地微信开发者工具调试流程的开发助手。请在本地项目 `D:\SE HM\用户交互设计\final_project\lifepilot-miniprogram` 中继续开发 CampusMind 小程序，不要破坏现有用户数据和云函数结构。
+## 18. 总结
 
-请优先完成以下任务：
-1. 将用户可见项目名称统一为 CampusMind，检查 app.json、页面标题、登录页、我的页、文档和提示文案；本地缓存键 `lifepilot_*` 可暂时保留，避免旧数据丢失。
-2. 新增新用户首次登录基本信息录入流程：微信昵称和头像来自微信授权，其余字段由用户填写，包括学校、专业、年级、学习目标、运动目标、睡眠目标、娱乐时长限制。保存后调用 userService.updateProfile，并设置 profileCompleted=true。
-3. 在“我的”页面支持编辑个人信息并保存，保存后刷新全局用户状态和页面展示；保存失败时保留表单内容并提示错误。
-4. 在“我的”页面新增退出登录按钮，点击后二次确认，清理本地登录态和全局用户状态，使用 wx.reLaunch 返回登录页；不要删除云端历史数据。
-5. 为所有非 tabBar 页面补充清晰退出方式：搜索页、番茄钟选择页、番茄钟计时页、无边记页都必须有返回/取消/退出按钮；番茄钟计时中退出需要二次确认，无边记有未保存内容时返回前需要提示。
-6. 修复番茄钟选择后进入计时页空白的问题：检查 pomodoroSelect 到 pomodoroTimer 的参数传递，pomodoroTimer.onLoad 必须校验 category/title/durationMinutes，参数缺失时显示错误状态和返回入口，不允许空白页面。
-7. 建立今日页和日历页共享的日程索引。日程以云端 _id 优先、本地 clientId 兜底，生成 searchIndexId；搜索结果按 type + searchIndexId 去重，确保同一日程只出现一次。
-8. 搜索结果只保留两类标签：日程、无边记。日程包括课程、会议、考试、任务和个人安排；无边记包括自由记录、灵感和日记类内容。
+CampusMind 当前已经具备完整的校园生活管理闭环：登录建档、日程安排、月历查看、搜索、无边记、生活记录、专注计时、发现统计、周报复盘、课表 OCR、语音识别和提醒服务。技术上采用小程序前端 + 微信云函数 + 云数据库的结构，前端通过统一 API 层访问云函数，同时用本地缓存兜底。后续开发重点应放在云端配置完善、AI/OCR/ASR 能力稳定化、重复日程和数据去重验证、以及用户资料和权限体验优化上。
 
-开发要求：
-- 优先复用现有 `miniprogram/utils/cloud.js` 的 api 调用方式。
-- 云函数仍保持 userService、scheduleService、noteService、recordService 四个服务入口。
-- 页面样式保持当前 CampusMind 清爽校园工具风格，不新增复杂装饰。
-- 修改前先阅读相关页面的 JS/WXML/WXSS 和云函数 index.js，保持现有代码风格。
-- 修改后在微信开发者工具中验证登录、资料保存、退出登录、搜索去重、番茄钟跳转、二级页面返回、今日页和日历页日程同步。
-- 若云端不可用，前端仍应保留本地缓存降级体验。
-```
-
-## 17. 总结
-
-CampusMind 的核心不是把所有学生工具简单堆叠在一个小程序中，而是围绕“安排、行动、记录、复盘”建立一个可持续使用的校园生活闭环。今日日程解决即时安排问题，日历视图解决月度感知问题，无边记解决自由记录问题，番茄钟解决执行问题，发现页和周报解决反馈问题。
-
-在技术实现上，项目使用微信小程序前端、微信云开发数据库和 4 个服务型云函数，形成了清晰的前后端职责边界。前端通过统一 `api` 调用云函数，同时保留本地缓存作为降级方案；云端通过 openid 做用户隔离，通过统一返回格式降低页面处理复杂度。当前实现已经具备课程设计展示和继续扩展的基础，后续可围绕 AI、语音、课程导入和协作能力继续增强。
