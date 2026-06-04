@@ -110,12 +110,38 @@
   border-radius: 22rpx;
   background: #ffffff;
   box-shadow: 0 16rpx 34rpx rgba(15, 23, 42, 0.07);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.module-card:active,
+.pomodoro-entry:active {
+  transform: scale(0.98);
 }
 
 .module-study { background: linear-gradient(160deg, #fff1f2 0%, #ffffff 72%); }
 .module-sport { background: linear-gradient(160deg, #ecfdf5 0%, #ffffff 72%); }
 .module-entertainment { background: linear-gradient(160deg, #fffbeb 0%, #ffffff 72%); }
 .module-sleep { background: linear-gradient(160deg, #eef2ff 0%, #ffffff 72%); }
+
+.module-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.module-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 16rpx;
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 900;
+}
 
 .module-name {
   color: #111827;
@@ -131,10 +157,18 @@
 }
 
 .module-total {
-  margin-top: 22rpx;
+  margin-top: 16rpx;
   color: #0f172a;
   font-size: 40rpx;
   font-weight: 900;
+}
+
+.module-status {
+  display: block;
+  margin-top: 18rpx;
+  color: #475569;
+  font-size: 22rpx;
+  font-weight: 700;
 }
 
 .module-today {

@@ -44,13 +44,24 @@
   <view class="day-sheet {{sheetOpen ? 'is-open' : ''}} {{sheetHeightClass}}">
     <view class="sheet-handle-zone" catchtouchstart="onSheetDragStart" catchtouchend="onSheetDragEnd">
       <view class="sheet-handle"></view>
+      <text class="sheet-height-label">{{sheetHeightLabel}}</text>
     </view>
     <view class="sheet-title">
-      <text>{{selectedDateKey}}</text>
-      <view class="sheet-tabs">
-        <text class="{{sheetTab === 'schedule' ? 'active' : ''}}">日程</text>
-        <text class="{{sheetTab === 'notes' ? 'active' : ''}}">无边记</text>
+      <view class="sheet-title-main">
+        <text class="sheet-date">{{selectedDateKey}}</text>
+        <text class="sheet-subtitle">上滑展开，下滑收起，左右切换内容</text>
       </view>
+      <button class="sheet-close" catchtap="closeDaySheet" aria-label="关闭日期详情">×</button>
+    </view>
+    <view class="sheet-tabs" role="tablist">
+      <button class="sheet-tab {{sheetTab === 'schedule' ? 'active' : ''}}" data-tab="schedule" catchtap="setSheetTab" aria-label="查看日程">
+        <text class="sheet-tab-icon">日</text>
+        <text>日程</text>
+      </button>
+      <button class="sheet-tab {{sheetTab === 'notes' ? 'active' : ''}}" data-tab="notes" catchtap="setSheetTab" aria-label="查看无边记">
+        <text class="sheet-tab-icon">记</text>
+        <text>无边记</text>
+      </button>
     </view>
 
     <view class="sheet-body" bindtouchstart="onSheetSwipeStart" bindtouchend="onSheetSwipeEnd">
@@ -61,16 +72,19 @@
               <view class="event-marker"></view>
               <view class="sheet-event-main">
                 <text class="sheet-event-title" overflow="ellipsis" max-lines="1">{{item.title}}</text>
-                <text class="sheet-event-location">{{item.location}}</text>
+                <text class="sheet-event-location">{{item.location || '无地点'}}</text>
               </view>
               <view class="sheet-event-time">
-                <text>{{item.start}}</text>
+                <text>{{item.start || '全天'}}</text>
                 <text>{{item.end}}</text>
               </view>
             </view>
           </view>
         </block>
-        <view class="empty-panel" wx:else><text>暂无日程</text></view>
+        <view class="empty-panel" wx:else>
+          <text class="empty-panel-title">这天还没有日程</text>
+          <button class="empty-panel-action" catchtap="createScheduleForSelected">添加日程</button>
+        </view>
       </scroll-view>
 
       <scroll-view wx:if="{{sheetTab === 'notes'}}" class="sheet-scroll" type="list" scroll-y="true">
@@ -80,7 +94,10 @@
             <text class="note-entry-text" overflow="ellipsis" max-lines="2">{{item.preview}}</text>
           </view>
         </block>
-        <view class="empty-panel" wx:else><text>暂无无边记</text></view>
+        <view class="empty-panel" wx:else>
+          <text class="empty-panel-title">还没有无边记</text>
+          <button class="empty-panel-action" catchtap="createNoteEntry">写一条无边记</button>
+        </view>
       </scroll-view>
     </view>
   </view>

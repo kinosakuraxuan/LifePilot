@@ -13,10 +13,16 @@ button {
   border-radius: 0;
   background: transparent;
   line-height: normal;
+  transition: transform 140ms ease, opacity 140ms ease, background-color 140ms ease;
 }
 
 button::after {
   border: 0;
+}
+
+button:active {
+  opacity: 0.88;
+  transform: scale(0.97);
 }
 
 .page {

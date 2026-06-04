@@ -7,18 +7,33 @@
 
   <scroll-view class="form-scroll {{pageMode === 'edit' ? 'edit-scroll' : ''}}" type="list" scroll-y="true">
     <view class="form-content {{pageMode === 'edit' ? 'edit-content' : ''}}">
+      <view class="form-section-head">
+        <text class="section-kicker">必要信息</text>
+        <text class="section-hint">先写清楚要做什么</text>
+      </view>
       <view class="form-card title-card">
-        <input class="field-input title-input" placeholder="标题" value="{{title}}" data-key="title" bindinput="updateField" />
-        <input class="field-input no-border" placeholder="地点或线上会议" value="{{location}}" data-key="location" bindinput="updateField" />
+        <view class="input-row {{formErrorTitle ? 'has-error' : ''}} {{activeField === 'title' ? 'is-active' : ''}}">
+          <text class="field-icon">事</text>
+          <input class="field-input title-input" placeholder="标题" value="{{title}}" data-key="title" data-field="title" bindinput="updateField" bindfocus="setActiveField" bindblur="clearActiveField" />
+        </view>
+        <text class="field-error" wx:if="{{formErrorTitle}}">{{formErrorTitle}}</text>
+        <view class="input-row no-border {{activeField === 'location' ? 'is-active' : ''}}">
+          <text class="field-icon muted-icon">地</text>
+          <input class="field-input no-border" placeholder="地点或线上会议" value="{{location}}" data-key="location" data-field="location" bindinput="updateField" bindfocus="setActiveField" bindblur="clearActiveField" />
+        </view>
       </view>
 
+      <view class="form-section-head">
+        <text class="section-kicker">时间</text>
+        <text class="section-hint">默认 1 小时，可随时调整</text>
+      </view>
       <view class="form-card time-card">
         <view class="form-row">
-          <text class="row-label">全天</text>
+          <view class="row-label-wrap"><text class="field-icon">全</text><text class="row-label">全天</text></view>
           <switch checked="{{allDay}}" color="#ef4444" bindchange="toggleAllDay" />
         </view>
         <view class="form-row time-row">
-          <text class="row-label">开始</text>
+          <view class="row-label-wrap"><text class="field-icon">始</text><text class="row-label">开始</text></view>
           <view class="date-pair">
             <picker class="date-picker" mode="date" value="{{startDateKey}}" bindchange="onStartDateChange">
               <text class="date-chip">{{startDate}}</text>
@@ -29,7 +44,7 @@
           </view>
         </view>
         <view class="form-row time-row no-border">
-          <text class="row-label">结束</text>
+          <view class="row-label-wrap"><text class="field-icon">止</text><text class="row-label">结束</text></view>
           <view class="date-pair">
             <picker class="date-picker" mode="date" value="{{endDateKey}}" disabled="{{allDay}}" bindchange="onEndDateChange">
               <text class="date-chip {{allDay ? 'locked' : ''}}">{{endDate}}</text>
@@ -39,22 +54,27 @@
             </picker>
           </view>
         </view>
+        <text class="field-error time-error" wx:if="{{formErrorTime}}">{{formErrorTime}}</text>
       </view>
 
+      <view class="form-section-head">
+        <text class="section-kicker">提醒与补充</text>
+        <text class="section-hint">低频选项保留在下方</text>
+      </view>
       <picker mode="selector" range="{{repeatOptionLabels}}" bindchange="onRepeatChange">
         <view class="form-card single-row">
-          <text>重复</text>
+          <view class="row-label-wrap"><text class="field-icon muted-icon">复</text><text>重复</text></view>
           <text class="select-value">{{repeatLabel}}</text>
         </view>
       </picker>
 
       <view class="form-card" wx:if="{{repeatValue !== 'never'}}">
         <view class="form-row">
-          <text>重复结束</text>
+          <view class="row-label-wrap"><text class="field-icon muted-icon">止</text><text>重复结束</text></view>
           <text class="select-value">{{repeatEndMode}}</text>
         </view>
         <view class="form-row no-border">
-          <text>结束日期</text>
+          <view class="row-label-wrap"><text class="field-icon muted-icon">日</text><text>结束日期</text></view>
           <picker mode="date" value="{{repeatEndDateKey}}" bindchange="onRepeatEndDateChange">
             <text class="date-chip">{{repeatEndDate}}</text>
           </picker>
@@ -63,14 +83,20 @@
 
       <picker mode="selector" range="{{reminderOptions}}" bindchange="onReminderChange">
         <view class="form-card single-row">
-          <text>提醒</text>
+          <view class="row-label-wrap"><text class="field-icon muted-icon">铃</text><text>提醒</text></view>
           <text class="select-value">{{reminder}}</text>
         </view>
       </picker>
 
       <view class="form-card title-card">
-        <input class="field-input" placeholder="链接" value="{{url}}" data-key="url" bindinput="updateField" />
-        <textarea class="note-input" placeholder="备注" value="{{note}}" data-key="note" bindinput="updateField"></textarea>
+        <view class="input-row {{activeField === 'url' ? 'is-active' : ''}}">
+          <text class="field-icon muted-icon">链</text>
+          <input class="field-input" placeholder="链接" value="{{url}}" data-key="url" data-field="url" bindinput="updateField" bindfocus="setActiveField" bindblur="clearActiveField" />
+        </view>
+        <view class="input-row note-row no-border {{activeField === 'note' ? 'is-active' : ''}}">
+          <text class="field-icon muted-icon">注</text>
+          <textarea class="note-input" placeholder="备注" value="{{note}}" data-key="note" data-field="note" bindinput="updateField" bindfocus="setActiveField" bindblur="clearActiveField"></textarea>
+        </view>
       </view>
 
       <view wx:if="{{pageMode === 'edit'}}" class="form-card delete-row" bindtap="deleteCurrentSchedule">
@@ -81,8 +107,8 @@
   </scroll-view>
 
   <view wx:if="{{pageMode !== 'edit'}}" class="bottom-input">
-    <view class="long-input-wrap">
-      <textarea class="long-input" placeholder="粘贴会议、任务或课程要求" value="{{longText}}" data-key="longText" disabled="{{isParsingSchedule || isRecognizingVoice}}" bindinput="updateField" bindblur="parseLongText"></textarea>
+    <view class="long-input-wrap {{activeField === 'longText' ? 'is-active' : ''}}">
+      <textarea class="long-input" placeholder="粘贴会议、任务或课程要求" value="{{longText}}" data-key="longText" data-field="longText" disabled="{{isParsingSchedule || isRecognizingVoice}}" bindinput="updateField" bindfocus="setActiveField" bindblur="onLongTextBlur"></textarea>
       <text class="parse-tip" wx:if="{{parseTip}}">{{parseTip}}</text>
     </view>
     <button class="voice-button {{isRecordingVoice ? 'recording' : ''}}" loading="{{isRecognizingVoice}}" disabled="{{isParsingSchedule || isRecognizingVoice}}" bindtap="startVoice" aria-label="智能录入">

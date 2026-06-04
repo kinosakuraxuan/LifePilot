@@ -33,10 +33,11 @@ const LUNAR_BY_MONTH = {
   ]
 };
 
-const SEARCH_TRIGGER_STYLE = "right:200rpx;top:0rpx;";
-const ADD_TRIGGER_STYLE = "right:0rpx;top:0rpx;";
-const SEARCH_ICON_STYLE = "transform: translate(30rpx, 0rpx);";
-const ADD_ICON_STYLE = "transform: translate(0rpx, -2rpx);";
+const SEARCH_TRIGGER_STYLE = "";
+const ADD_TRIGGER_STYLE = "";
+const SEARCH_ICON_STYLE = "";
+const ADD_ICON_STYLE = "transform: translateY(-2rpx);";
+const RECENT_SCHEDULE_KEY = "campusmind_recent_schedule_id";
 
 function formatMonth(year, month) {
   return `${year}\u5e74${month}\u6708`;
@@ -64,7 +65,7 @@ function chromeLayout() {
     const buttonSize = 44;
     const topBarHeight = menu.bottom + 18;
     const actionTop = menu.top + (menu.height - buttonSize) / 2;
-    const actionRight = Math.max(18, windowInfo.windowWidth - menu.left -120);
+    const actionRight = Math.max(18, windowInfo.windowWidth - menu.left - 148);
     return {
       topBarStyle: `min-height:${topBarHeight}px;padding-top:${menu.top}px;`,
       topActionsStyle: `right:${actionRight}px;top:${actionTop}px;`,
@@ -99,6 +100,26 @@ function displayNoteDate(date) {
   const parts = String(date || "").split("-");
   if (parts.length !== 3) return "";
   return `${Number(parts[1])}/${Number(parts[2])}`;
+}
+
+function selectedDateText(year, month, day, currentToday) {
+  const dateKey = `${year}-${pad(month)}-${pad(day)}`;
+  if (dateKey === currentToday.dateKey) return "今天";
+  return `${month}月${day}日`;
+}
+
+function buildAgendaSummary(events) {
+  if (!events.length) {
+    return {
+      title: "今天没有安排",
+      countText: "空闲"
+    };
+  }
+  const next = events.find((item) => item.start) || events[0];
+  return {
+    title: next.start ? `下一项 ${next.start} ${next.title}` : `下一项 ${next.title}`,
+    countText: `${events.length} 项`
+  };
 }
 
 function monthMeta(year, month) {
@@ -157,9 +178,10 @@ function eventsFor(year, month, day) {
     .map((item) => itemToEvent(item, dateKey));
 }
 
-function withSwipeState(events, swipedId) {
+function withSwipeState(events, swipedId, highlightedId) {
   return events.map((item) => Object.assign({}, item, {
-    open: item.id === swipedId
+    open: item.id === swipedId,
+    highlight: !!highlightedId && item.id === highlightedId
   }));
 }
 
@@ -197,6 +219,10 @@ Page({
     selectedDay: today.day,
     days: buildMonth(today.year, today.month, today.day, today),
     events: [],
+    selectedDateLabel: "今天",
+    agendaSummary: buildAgendaSummary([]),
+    recentHighlightId: "",
+    monthTransitionClass: "",
     touchStartY: 0,
     agendaTouchStartX: 0,
     agendaTouchStartY: 0,
@@ -233,10 +259,13 @@ Page({
     const selectedDay = this.data.selectedDay;
     const swipedId = this.data.swipedId;
     const currentToday = getToday();
+    const events = withSwipeState(eventsFor(year, month, selectedDay), swipedId, this.data.recentHighlightId);
     this.setData({
       todayKey: currentToday.dateKey,      monthTitle: formatMonth(year, month),
       days: buildMonth(year, month, selectedDay, currentToday),
-      events: withSwipeState(eventsFor(year, month, selectedDay), swipedId)
+      events,
+      selectedDateLabel: selectedDateText(year, month, selectedDay, currentToday),
+      agendaSummary: buildAgendaSummary(events)
     });
     if (!skipCloud) this.loadCloudSchedules(year, month, selectedDay);
   },
@@ -283,6 +312,23 @@ Page({
         monthTitle: formatMonth(currentToday.year, currentToday.month),        swipedId: ""
       });
     }
+    let recentHighlightId = "";
+    try {
+      recentHighlightId = wx.getStorageSync(RECENT_SCHEDULE_KEY) || "";
+      if (recentHighlightId) wx.removeStorageSync(RECENT_SCHEDULE_KEY);
+    } catch (error) {
+      recentHighlightId = "";
+    }
+    if (recentHighlightId) {
+      this.setData({ recentHighlightId });
+      clearTimeout(this.highlightTimer);
+      this.highlightTimer = setTimeout(() => {
+        this.setData({
+          recentHighlightId: "",
+          events: withSwipeState(this.data.events, this.data.swipedId, "")
+        });
+      }, 1400);
+    }
     this.refreshCalendar({ skipCloud: true });
     this.loadCloudSchedules(this.data.year, this.data.month, this.data.selectedDay);
     showDueLocalReminder();
@@ -306,7 +352,15 @@ Page({
       year,
       month,
       selectedDay,
-      monthTitle: formatMonth(year, month),    }, () => this.refreshCalendar());
+      monthTitle: formatMonth(year, month),
+      monthTransitionClass: delta > 0 ? "month-flip-next" : "month-flip-prev"
+    }, () => {
+      this.refreshCalendar();
+      clearTimeout(this.monthTransitionTimer);
+      this.monthTransitionTimer = setTimeout(() => {
+        this.setData({ monthTransitionClass: "" });
+      }, 240);
+    });
   },
 
   onMonthTouchStart(e) {
@@ -341,6 +395,11 @@ Page({
   openTodayBoundless() {
     const currentToday = getToday();
     this.openNoteSheetByDate(currentToday.dateKey);
+  },
+
+  openSelectedBoundless() {
+    const dateKey = `${this.data.year}-${pad(this.data.month)}-${pad(this.data.selectedDay)}`;
+    this.openNoteSheetByDate(dateKey);
   },
 
   openNoteSheetByDate(date) {
@@ -523,14 +582,14 @@ Page({
     if (deltaX < -42) {
       this.setData({
         swipedId: id,
-        events: withSwipeState(this.data.events, id)
+        events: withSwipeState(this.data.events, id, this.data.recentHighlightId)
       });
       return;
     }
     if (deltaX > 32 || Math.abs(deltaX) < 8) {
       this.setData({
         swipedId: "",
-        events: withSwipeState(this.data.events, "")
+        events: withSwipeState(this.data.events, "", this.data.recentHighlightId)
       });
     }
   },
@@ -539,7 +598,7 @@ Page({
     const id = e.currentTarget.dataset.id;
     const occurrenceDateKey = e.currentTarget.dataset.date || `${this.data.year}-${pad(this.data.month)}-${pad(this.data.selectedDay)}`;
     if (!id) return;
-    this.setData({ swipedId: "", events: withSwipeState(this.data.events, "") });
+    this.setData({ swipedId: "", events: withSwipeState(this.data.events, "", this.data.recentHighlightId) });
     wx.navigateTo({ url: `/pages/scheduleAdd/scheduleAdd?id=${id}&mode=edit&dateKey=${occurrenceDateKey}` });
   },
 
@@ -550,7 +609,7 @@ Page({
     const schedule = getItemById(KEYS.schedules, id);
     const repeatRule = schedule && schedule.repeatRule;
     const isRepeating = repeatRule && repeatRule.type && repeatRule.type !== "never";
-    const closeSwipe = () => this.setData({ swipedId: "", events: withSwipeState(this.data.events, "") }, () => this.refreshCalendar({ skipCloud: true }));
+    const closeSwipe = () => this.setData({ swipedId: "", events: withSwipeState(this.data.events, "", this.data.recentHighlightId) }, () => this.refreshCalendar({ skipCloud: true }));
     const deleteAll = (toastTitle) => {
       removeItem(KEYS.schedules, id);
       api.schedule.delete(id).catch(() => {});

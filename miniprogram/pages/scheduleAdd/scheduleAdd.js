@@ -149,6 +149,7 @@ const missingFieldLabels = {
 
 const defaultDateKey = toDateKey(new Date());
 const defaultDateTime = getDefaultDateTime(defaultDateKey);
+const RECENT_SCHEDULE_KEY = "campusmind_recent_schedule_id";
 
 function findRepeatOption(value) {
   return repeatOptions.find((item) => item.value === value) || repeatOptions[0];
@@ -256,6 +257,9 @@ Page({
     isRecordingVoice: false,
     parseTip: "",
     missingFields: [],
+    formErrorTitle: "",
+    formErrorTime: "",
+    activeField: "",
     pageMode: "create",
     editId: "",
     editDateKey: "",
@@ -328,7 +332,24 @@ Page({
 
   updateField(e) {
     const key = e.currentTarget.dataset.key;
-    this.setData({ [key]: e.detail.value });
+    const updates = { [key]: e.detail.value };
+    if (key === "title" && String(e.detail.value || "").trim()) updates.formErrorTitle = "";
+    this.setData(updates);
+  },
+
+  setActiveField(e) {
+    const field = e.currentTarget.dataset.field || "";
+    if (!field) return;
+    this.setData({ activeField: field });
+  },
+
+  clearActiveField() {
+    this.setData({ activeField: "" });
+  },
+
+  onLongTextBlur() {
+    this.clearActiveField();
+    this.parseLongText();
   },
 
   setupRecorder() {
@@ -431,7 +452,7 @@ Page({
 
   toggleAllDay(e) {
     const allDay = e.detail.value;
-    const updates = { allDay };
+    const updates = { allDay, formErrorTime: "" };
     if (allDay) {
       updates.endDateKey = this.data.startDateKey;
       updates.endDate = this.data.startDate;
@@ -460,7 +481,8 @@ Page({
       startDateKey: value,
       startDate: formatDateLabel(value),
       endDateKey: value,
-      endDate: formatDateLabel(value)
+      endDate: formatDateLabel(value),
+      formErrorTime: ""
     };
     if (this.data.allDay) {
       this.setData(updates);
@@ -476,7 +498,7 @@ Page({
   onStartTimeChange(e) {
     if (this.data.allDay) return;
     const value = e.detail.value;
-    const updates = { startTime: value };
+    const updates = { startTime: value, formErrorTime: "" };
     if (!this.data.hasManualEndTime) {
       Object.assign(updates, getEndOneHourAfterStart(this.data.startDateKey, value));
     } else {
@@ -490,7 +512,8 @@ Page({
     const updates = this.adjustInvalidEnd({
       hasManualEndTime: true,
       endDateKey: this.data.startDateKey,
-      endDate: formatDateLabel(this.data.startDateKey)
+      endDate: formatDateLabel(this.data.startDateKey),
+      formErrorTime: ""
     }, "结束时间必须晚于开始时间，已自动调整");
     this.setData(updates);
   },
@@ -499,7 +522,8 @@ Page({
     if (this.data.allDay) return;
     const updates = this.adjustInvalidEnd({
       hasManualEndTime: true,
-      endTime: e.detail.value
+      endTime: e.detail.value,
+      formErrorTime: ""
     }, "结束时间必须晚于开始时间，已自动调整");
     this.setData(updates);
   },
@@ -564,16 +588,20 @@ Page({
   },
 
   validateForm() {
+    this.setData({ formErrorTitle: "", formErrorTime: "" });
     if (!this.data.title.trim()) {
+      this.setData({ formErrorTitle: "请输入日程标题，保存前必须填写。" });
       wx.showToast({ title: "请输入标题", icon: "none" });
       return false;
     }
     if (!this.data.allDay) {
       if (!this.data.startDateKey || !this.data.startTime || !this.data.endDateKey || !this.data.endTime) {
+        this.setData({ formErrorTime: "请完善开始和结束时间。" });
         wx.showToast({ title: "请完善开始和结束时间", icon: "none" });
         return false;
       }
       if (!isEndAfterStart(this.data.startDateKey, this.data.startTime, this.data.startDateKey, this.data.endTime)) {
+        this.setData({ formErrorTime: "结束时间必须晚于开始时间。" });
         wx.showToast({ title: "结束时间必须晚于开始时间", icon: "none" });
         return false;
       }
@@ -625,6 +653,9 @@ Page({
     const schedule = this.buildSchedulePatch(id);
     this.prepareReminderForSave(schedule).then((prepared) => {
       appendItem(KEYS.schedules, prepared);
+      try {
+        wx.setStorageSync(RECENT_SCHEDULE_KEY, id);
+      } catch (error) {}
       api.schedule.create(prepared).catch((error) => {
         console.warn("schedule create pending local only", error.message);
       });

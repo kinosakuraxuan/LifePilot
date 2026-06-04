@@ -167,6 +167,15 @@ function notesForDate(date) {
   }));
 }
 
+function sheetHeightLabel(value) {
+  const labels = {
+    full: "全屏",
+    "three-quarter": "舒展",
+    half: "半屏"
+  };
+  return labels[value] || "舒展";
+}
+
 function buildMonth(year, month, selectedDay, today, swipedId) {
   const meta = monthMeta(year, month);
   const totalSlots = Math.ceil((meta.first + meta.count) / 7) * 7;
@@ -209,6 +218,7 @@ Page({
     sheetVisible: false,
     sheetOpen: false,
     sheetHeightClass: "three-quarter",
+    sheetHeightLabel: sheetHeightLabel("three-quarter"),
     sheetTab: "schedule",
     sheetTouchStartX: 0,
     sheetTouchStartY: 0,
@@ -353,7 +363,8 @@ Page({
       swipedId: "",
       sheetVisible: true,
       sheetTab: "schedule",
-      sheetHeightClass: "three-quarter"
+      sheetHeightClass: "three-quarter",
+      sheetHeightLabel: sheetHeightLabel("three-quarter")
     }, () => {
       this.refreshCalendar({ skipCloud: true });
       this.loadCloudSchedules(this.data.year, this.data.month, day);
@@ -377,7 +388,23 @@ Page({
     let index = order.indexOf(this.data.sheetHeightClass);
     if (deltaY < -35) index = Math.max(0, index - 1);
     if (deltaY > 35) index = Math.min(order.length - 1, index + 1);
-    this.setData({ sheetHeightClass: order[index] });
+    const nextHeight = order[index];
+    this.setData({ sheetHeightClass: nextHeight, sheetHeightLabel: sheetHeightLabel(nextHeight) });
+  },
+
+  setSheetTab(e) {
+    const tab = e.currentTarget.dataset.tab;
+    if (!tab || tab === this.data.sheetTab) return;
+    this.setData({
+      sheetTab: tab,
+      swipedId: "",
+      popupEvents: withSwipeState(this.data.popupEvents, "")
+    });
+  },
+
+  createScheduleForSelected() {
+    const dateKey = this.data.selectedDateKey || dateKeyOf(this.data.year, this.data.month, this.data.selectedDay);
+    wx.navigateTo({ url: `/pages/scheduleAdd/scheduleAdd?dateKey=${dateKey}` });
   },
 
   onSheetSwipeStart(e) {

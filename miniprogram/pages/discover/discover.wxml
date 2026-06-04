@@ -29,9 +29,13 @@
       bindtap="goModule"
     >
       <view class="module-top">
-        <text class="module-name">{{item.label}}</text>
+        <view class="module-name-wrap">
+          <text class="module-icon" style="background: {{item.color}};">{{item.icon}}</text>
+          <text class="module-name">{{item.label}}</text>
+        </view>
         <text class="module-trend">{{item.trend}}</text>
       </view>
+      <text class="module-status">{{item.status}}</text>
       <text class="module-total">{{item.weeklyText}}</text>
       <text class="module-today">今日 {{item.todayText}}</text>
       <view class="spark-chart">
@@ -40,14 +44,14 @@
           wx:for="{{item.chart.segments}}"
           wx:for-item="seg"
           wx:key="id"
-          style="left: {{seg.left}}; top: {{seg.top}}; width: {{seg.width}}; transform: {{seg.rotate}};"
+          style="left: {{seg.left}}; top: {{seg.top}}; width: {{seg.width}}; transform: {{seg.rotate}}; background: {{item.color}};"
         ></view>
         <view
           class="spark-point"
           wx:for="{{item.chart.points}}"
           wx:for-item="point"
           wx:key="id"
-          style="left: {{point.left}}; top: {{point.top}};"
+          style="left: {{point.left}}; top: {{point.top}}; background: {{item.color}};"
         ></view>
       </view>
     </view>

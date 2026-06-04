@@ -389,10 +389,32 @@
 }
 
 .empty-panel {
-  padding-top: 150rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 130rpx;
   color: #9ca3af;
-  font-size: 38rpx;
   text-align: center;
+}
+
+.empty-panel-title {
+  display: block;
+  color: #111827;
+  font-size: 32rpx;
+  font-weight: 900;
+}
+
+.empty-panel-action {
+  min-width: 180rpx;
+  height: 68rpx;
+  margin-top: 22rpx;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 800;
+  line-height: 68rpx;
 }
 
 .diary-input {
@@ -485,6 +507,7 @@
 }
 
 .sheet-handle-zone {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -498,6 +521,18 @@
   background: #c7c9cf;
 }
 
+.sheet-height-label {
+  position: absolute;
+  right: 4rpx;
+  top: 4rpx;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: #f3f4f6;
+  color: #64748b;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
 .sheet-title {
   display: flex;
   align-items: center;
@@ -508,21 +543,115 @@
   font-weight: 800;
 }
 
+.sheet-title-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.sheet-date,
+.sheet-subtitle {
+  display: block;
+}
+
+.sheet-date {
+  color: #111827;
+  font-size: 34rpx;
+  font-weight: 900;
+}
+
+.sheet-subtitle {
+  margin-top: 6rpx;
+  color: #64748b;
+  font-size: 22rpx;
+  font-weight: 500;
+}
+
+.sheet-close {
+  flex: 0 0 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 64rpx;
+  min-width: 64rpx;
+  max-width: 64rpx;
+  height: 64rpx;
+  min-height: 64rpx;
+  max-height: 64rpx;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #f3f4f6;
+  color: #334155;
+  font-size: 34rpx;
+  font-weight: 800;
+  line-height: 64rpx;
+  text-align: center;
+  transform-origin: center;
+}
+
+.sheet-close:active {
+  background: #e5e7eb;
+}
+
+.sheet-close::after,
+.sheet-tab::after,
+.empty-panel-action::after {
+  border: 0;
+}
+
 .sheet-tabs {
   display: flex;
   align-items: center;
-  gap: 24rpx;
-  color: #9ca3af;
-  font-size: 26rpx;
-  font-weight: 700;
+  gap: 8rpx;
+  margin: 12rpx 0 18rpx;
+  padding: 8rpx;
+  border-radius: 999rpx;
+  background: #f3f4f6;
 }
 
-.sheet-tabs .active {
+.sheet-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  height: 64rpx;
+  margin: 0;
+  padding: 0;
+  border-radius: 999rpx;
+  background: transparent;
+  color: #64748b;
+  font-size: 26rpx;
+  font-weight: 800;
+  line-height: 64rpx;
+}
+
+.sheet-tab.active {
+  background: #ffffff;
   color: #ef4444;
+  box-shadow: 0 8rpx 20rpx rgba(15, 23, 42, 0.08);
+}
+
+.sheet-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34rpx;
+  height: 34rpx;
+  border-radius: 50%;
+  background: #cbd5e1;
+  color: #ffffff;
+  font-size: 20rpx;
+}
+
+.sheet-tab.active .sheet-tab-icon {
+  background: #ef4444;
 }
 
 .sheet-body {
-  height: calc(100% - 122rpx);
+  height: calc(100% - 214rpx);
 }
 
 .sheet-scroll {

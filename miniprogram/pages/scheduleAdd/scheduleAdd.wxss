@@ -36,6 +36,31 @@
   padding-bottom: calc(70rpx + env(safe-area-inset-bottom));
 }
 
+.form-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18rpx;
+  margin: 0 4rpx 14rpx;
+}
+
+.section-kicker,
+.section-hint {
+  display: block;
+}
+
+.section-kicker {
+  color: #111827;
+  font-size: 28rpx;
+  font-weight: 900;
+}
+
+.section-hint {
+  color: #64748b;
+  font-size: 22rpx;
+  white-space: nowrap;
+}
+
 .plain {
   box-sizing: border-box;
   display: block;
@@ -106,11 +131,72 @@
   padding: 0 36rpx;
 }
 
-.field-input {
-  min-height: 92rpx;
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
   border-bottom: 1rpx solid #e5e7eb;
+  border-radius: 14rpx;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.input-row.no-border,
+.input-row.note-row {
+  border-bottom: 0;
+}
+
+.input-row.has-error {
+  border-bottom-color: #ef4444;
+  animation: fieldShake 180ms ease-out;
+}
+
+.input-row.is-active {
+  background: #fff7f7;
+  border-bottom-color: #fecaca;
+}
+
+.field-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42rpx;
+  height: 42rpx;
+  border-radius: 50%;
+  background: #fee2e2;
+  color: #ef4444;
+  font-size: 22rpx;
+  font-weight: 900;
+}
+
+.muted-icon {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.input-row.is-active .field-icon {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.field-input {
+  flex: 1;
+  min-height: 92rpx;
+  border-bottom: 0;
   color: #111827;
   font-size: 34rpx;
+}
+
+.field-error {
+  display: block;
+  padding: 0 0 18rpx 60rpx;
+  color: #dc2626;
+  font-size: 24rpx;
+  line-height: 1.35;
+}
+
+.time-error {
+  padding: 0 28rpx 20rpx 88rpx;
 }
 
 .title-input {
@@ -136,6 +222,13 @@
   text-align: left;
 }
 
+.row-label-wrap {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  min-width: 0;
+}
+
 .time-card {
   border-radius: 0;
 }
@@ -147,7 +240,7 @@
 }
 
 .time-card .row-label {
-  flex: 0 0 104rpx;
+  flex: 0 0 auto;
   color: #000000;
   font-size: 36rpx;
   font-weight: 400;
@@ -234,6 +327,7 @@
 }
 
 .note-input {
+  flex: 1;
   box-sizing: border-box;
   width: 100%;
   min-height: 120rpx;
@@ -256,6 +350,11 @@
 .long-input-wrap {
   flex: 1;
   min-width: 0;
+  transition: transform 160ms ease;
+}
+
+.long-input-wrap.is-active {
+  transform: translateY(-4rpx);
 }
 
 .delete-row {
@@ -289,6 +388,12 @@
   color: #111827;
   font-size: 28rpx;
   box-shadow: 0 12rpx 30rpx rgba(15, 23, 42, 0.08);
+  transition: box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.long-input-wrap.is-active .long-input {
+  background: #fffafa;
+  box-shadow: 0 16rpx 34rpx rgba(239, 68, 68, 0.14);
 }
 
 .parse-tip {
@@ -343,4 +448,11 @@
   border-left: 8rpx solid #f3f4f6;
   border-right: 8rpx solid #f3f4f6;
   border-radius: 0 0 30rpx 30rpx;
+}
+
+@keyframes fieldShake {
+  0% { transform: translateX(0); }
+  30% { transform: translateX(-8rpx); }
+  60% { transform: translateX(8rpx); }
+  100% { transform: translateX(0); }
 }

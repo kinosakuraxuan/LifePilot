@@ -61,18 +61,30 @@
 }
 
 .clear-button {
+  flex: 0 0 52rpx;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   width: 52rpx;
   height: 52rpx;
   min-width: 52rpx;
+  max-width: 52rpx;
   min-height: 52rpx;
+  max-height: 52rpx;
   padding: 0;
+  overflow: hidden;
   border-radius: 50%;
   background: #e5e7eb;
   color: #6b7280;
-  line-height: 1;
+  font-weight: 800;
+  line-height: 52rpx;
+  text-align: center;
+  transform-origin: center;
+}
+
+.clear-button:active {
+  background: #d1d5db;
 }
 
 .search-button {

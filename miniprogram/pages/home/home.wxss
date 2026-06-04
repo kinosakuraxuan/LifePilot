@@ -48,14 +48,22 @@
   align-items: center;
   justify-content: center;
   position: absolute;
-  width: 5rpx;
+  width: 72rpx;
   height: 60rpx;
   margin: 0;
   padding: 0;
+  border-radius: 999rpx;
   background: transparent;
   color: #ef4444;
   font-size: 48rpx;
   line-height: 1;
+}
+
+.search-icon:active,
+.top-add:active,
+.boundless-corner-trigger:active,
+.empty-action:active {
+  transform: scale(0.96);
 }
 
 .top-add {
@@ -117,6 +125,15 @@
   max-height: 50vh;
   overflow: hidden;
   background: #f7f7f8;
+  transform-origin: 50% 50%;
+}
+
+.simple-month.month-flip-next {
+  animation: monthNextIn 220ms ease-out;
+}
+
+.simple-month.month-flip-prev {
+  animation: monthPrevIn 220ms ease-out;
 }
 
 .simple-day {
@@ -188,6 +205,47 @@
   background: #ffffff;
 }
 
+.agenda-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  margin-bottom: 34rpx;
+}
+
+.agenda-summary-label,
+.agenda-summary-title,
+.agenda-summary-count {
+  display: block;
+}
+
+.agenda-summary-label {
+  color: #ef4444;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.agenda-summary-title {
+  max-width: 480rpx;
+  margin-top: 6rpx;
+  overflow: hidden;
+  color: #111827;
+  font-size: 34rpx;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agenda-summary-count {
+  flex: 0 0 auto;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: #f3f4f6;
+  color: #475569;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
 .swipe-row {
   position: relative;
   overflow: hidden;
@@ -249,6 +307,17 @@
   align-items: center;
   gap: 18rpx;
   margin-bottom: 0;
+  padding: 8rpx 10rpx;
+  border-radius: 18rpx;
+  transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.agenda-item:active {
+  transform: scale(0.99);
+}
+
+.agenda-item.just-added {
+  animation: agendaAdded 1200ms ease-out;
 }
 
 .accent {
@@ -291,36 +360,109 @@
 
 .empty-agenda {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 520rpx;
   color: #9ca3af;
-  font-size: 44rpx;
+  text-align: center;
+}
+
+.empty-icon {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 50%;
+  background: #fee2e2;
+  color: #ef4444;
+  font-size: 54rpx;
   font-weight: 700;
+  line-height: 84rpx;
+}
+
+.empty-title {
+  display: block;
+  margin-top: 20rpx;
+  color: #111827;
+  font-size: 36rpx;
+  font-weight: 900;
+}
+
+.empty-copy {
+  display: block;
+  max-width: 460rpx;
+  margin-top: 10rpx;
+  color: #64748b;
+  font-size: 26rpx;
+  line-height: 1.45;
+}
+
+.empty-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 28rpx;
+}
+
+.empty-action {
+  min-width: 156rpx;
+  height: 68rpx;
+  margin: 0;
+  padding: 0 22rpx;
+  border: 1rpx solid #cbd5e1;
+  border-radius: 999rpx;
+  background: #ffffff;
+  color: #334155;
+  font-size: 26rpx;
+  line-height: 68rpx;
+}
+
+.empty-action.primary {
+  border-color: #ef4444;
+  background: #ef4444;
+  color: #ffffff;
 }
 
 .boundless-corner-trigger {
   position: fixed;
-  right: -20rpx;
-  bottom: calc(110rpx + env(safe-area-inset-bottom));
+  right: 34rpx;
+  bottom: calc(138rpx + env(safe-area-inset-bottom));
   z-index: 1200;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 112rpx;
-  height: 112rpx;
+  gap: 10rpx;
+  min-width: 98rpx;
+  height: 82rpx;
   margin: 0;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
+  padding: 0 14rpx;
+  border: 1rpx solid rgba(234, 179, 8, 0.28);
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.96);
   line-height: 1;
-  box-shadow: none;
+  box-shadow: 0 14rpx 34rpx rgba(15, 23, 42, 0.12);
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.boundless-corner-trigger.is-empty-date {
+  min-width: 176rpx;
+  background: #fffdf2;
+  box-shadow: 0 18rpx 42rpx rgba(234, 179, 8, 0.22);
+}
+
+.boundless-label {
+  display: none;
+  color: #a16207;
+  font-size: 25rpx;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.boundless-corner-trigger.is-empty-date .boundless-label {
+  display: block;
 }
 
 .trigger-icon-box {
-  width: 92rpx;
-  height: 104rpx;
+  width: 58rpx;
+  height: 58rpx;
   border-radius: 0;
   background: transparent;
   padding: 0;
@@ -478,4 +620,41 @@
   background: #f8fafc;
   font-size: 30rpx;
   line-height: 1.7;
+}
+
+@keyframes monthNextIn {
+  from {
+    opacity: 0;
+    transform: translateY(28rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes monthPrevIn {
+  from {
+    opacity: 0;
+    transform: translateY(-28rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes agendaAdded {
+  0% {
+    background: #fee2e2;
+    transform: scale(0.985);
+  }
+  55% {
+    background: #fff1f2;
+    transform: scale(1);
+  }
+  100% {
+    background: transparent;
+    transform: scale(1);
+  }
 }
