@@ -83,6 +83,20 @@ function pad(value) {
   return value < 10 ? `0${value}` : `${value}`;
 }
 
+function timeToMinutes(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+function minutesNow(date) {
+  const now = date || new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
 function getToday() {
   const now = new Date();
   const year = now.getFullYear();
@@ -104,21 +118,55 @@ function displayNoteDate(date) {
 
 function selectedDateText(year, month, day, currentToday) {
   const dateKey = `${year}-${pad(month)}-${pad(day)}`;
-  if (dateKey === currentToday.dateKey) return "今天";
-  return `${month}月${day}日`;
+  if (dateKey === currentToday.dateKey) return "\u4eca\u5929";
+  return `${month}\u6708${day}\u65e5`;
+}
+
+function deriveAgendaStatus(item, occurrenceDateKey, now) {
+  const currentToday = getToday().dateKey;
+  if (occurrenceDateKey < currentToday) return "ended";
+  if (occurrenceDateKey > currentToday) return "upcoming";
+  const startMinutes = timeToMinutes(item.start);
+  const endMinutes = timeToMinutes(item.end);
+  const currentMinutes = minutesNow(now);
+  if (startMinutes === null && endMinutes === null) return "upcoming";
+  if (startMinutes !== null && currentMinutes < startMinutes) return "upcoming";
+  if (endMinutes !== null && currentMinutes >= endMinutes) return "ended";
+  if (endMinutes === null && startMinutes !== null && currentMinutes > startMinutes) return "ended";
+  return "active";
+}
+
+function withAgendaStatus(events, occurrenceDateKey, now) {
+  return (events || []).map((item) => {
+    const status = deriveAgendaStatus(item, item.occurrenceDateKey || occurrenceDateKey, now);
+    return Object.assign({}, item, { status });
+  });
 }
 
 function buildAgendaSummary(events) {
   if (!events.length) {
     return {
-      title: "今天没有安排",
-      countText: "空闲"
+      title: "\u4eca\u5929\u6ca1\u6709\u5b89\u6392",
+      countText: "\u7a7a\u95f2"
     };
   }
-  const next = events.find((item) => item.start) || events[0];
+  const active = events.find((item) => item.status === "active");
+  const next = events.find((item) => item.status === "upcoming");
+  if (active) {
+    return {
+      title: active.start ? `\u8fdb\u884c\u4e2d ${active.start} ${active.title}` : `\u8fdb\u884c\u4e2d ${active.title}`,
+      countText: `${events.length} \u9879`
+    };
+  }
+  if (!next) {
+    return {
+      title: "\u4eca\u65e5\u5df2\u5b8c\u6210",
+      countText: `${events.length} \u9879`
+    };
+  }
   return {
-    title: next.start ? `下一项 ${next.start} ${next.title}` : `下一项 ${next.title}`,
-    countText: `${events.length} 项`
+    title: next.start ? `\u4e0b\u4e00\u9879 ${next.start} ${next.title}` : `\u4e0b\u4e00\u9879 ${next.title}`,
+    countText: `${events.length} \u9879`
   };
 }
 
@@ -175,7 +223,8 @@ function eventsFor(year, month, day) {
   const dateKey = `${year}-${pad(month)}-${pad(day)}`;
   return readList(KEYS.schedules, [])
     .filter((item) => isScheduleOnDate(item, dateKey))
-    .map((item) => itemToEvent(item, dateKey));
+    .map((item) => itemToEvent(item, dateKey))
+    .sort((a, b) => String(a.start || "99:99").localeCompare(String(b.start || "99:99")));
 }
 
 function withSwipeState(events, swipedId, highlightedId) {
@@ -219,8 +268,9 @@ Page({
     selectedDay: today.day,
     days: buildMonth(today.year, today.month, today.day, today),
     events: [],
-    selectedDateLabel: "今天",
+    selectedDateLabel: "\u4eca\u5929",
     agendaSummary: buildAgendaSummary([]),
+    refreshingAgenda: false,
     recentHighlightId: "",
     monthTransitionClass: "",
     touchStartY: 0,
@@ -252,6 +302,16 @@ Page({
     this.setData(chromeLayout());
   },
 
+  onHide() {
+    this.stopAgendaClock();
+  },
+
+  onUnload() {
+    this.stopAgendaClock();
+    clearTimeout(this.highlightTimer);
+    clearTimeout(this.monthTransitionTimer);
+  },
+
   refreshCalendar(options) {
     const skipCloud = !!(options && options.skipCloud);
     const year = this.data.year;
@@ -259,7 +319,8 @@ Page({
     const selectedDay = this.data.selectedDay;
     const swipedId = this.data.swipedId;
     const currentToday = getToday();
-    const events = withSwipeState(eventsFor(year, month, selectedDay), swipedId, this.data.recentHighlightId);
+    const dateKey = `${year}-${pad(month)}-${pad(selectedDay)}`;
+    const events = withSwipeState(withAgendaStatus(eventsFor(year, month, selectedDay), dateKey, new Date()), swipedId, this.data.recentHighlightId);
     this.setData({
       todayKey: currentToday.dateKey,      monthTitle: formatMonth(year, month),
       days: buildMonth(year, month, selectedDay, currentToday),
@@ -270,9 +331,57 @@ Page({
     if (!skipCloud) this.loadCloudSchedules(year, month, selectedDay);
   },
 
+  refreshAgendaStatusTick() {
+    const currentToday = getToday();
+    if (this.data.todayKey !== currentToday.dateKey) {
+      this.setData({
+        year: currentToday.year,
+        month: currentToday.month,
+        selectedDay: currentToday.day,
+        monthTitle: formatMonth(currentToday.year, currentToday.month),
+        swipedId: ""
+      }, () => this.refreshCalendar({ skipCloud: true }));
+      return;
+    }
+    const dateKey = `${this.data.year}-${pad(this.data.month)}-${pad(this.data.selectedDay)}`;
+    const events = withSwipeState(withAgendaStatus(this.data.events, dateKey, new Date()), this.data.swipedId, this.data.recentHighlightId);
+    this.setData({
+      events,
+      agendaSummary: buildAgendaSummary(events)
+    });
+  },
+
+  startAgendaClock() {
+    this.stopAgendaClock();
+    this.refreshAgendaStatusTick();
+    this.agendaClockTimer = setInterval(() => {
+      this.refreshAgendaStatusTick();
+    }, 60000);
+  },
+
+  stopAgendaClock() {
+    if (!this.agendaClockTimer) return;
+    clearInterval(this.agendaClockTimer);
+    this.agendaClockTimer = null;
+  },
+
+  onAgendaRefresh() {
+    this.setData({ refreshingAgenda: true });
+    this.refreshCalendar({ skipCloud: true });
+    const cloudLoad = this.loadCloudSchedules(this.data.year, this.data.month, this.data.selectedDay);
+    this.refreshAgendaStatusTick();
+    if (cloudLoad && cloudLoad.then) {
+      cloudLoad.then(() => {
+        this.setData({ refreshingAgenda: false });
+      });
+      return;
+    }
+    this.setData({ refreshingAgenda: false });
+  },
+
   loadCloudSchedules(year, month, selectedDay) {
     const dateKey = `${year}-${pad(month)}-${pad(selectedDay)}`;
-    Promise.all([
+    return Promise.all([
       api.schedule.listByDate(dateKey),
       api.schedule.listByMonth(year, month)
     ]).then((results) => {
@@ -331,6 +440,7 @@ Page({
     }
     this.refreshCalendar({ skipCloud: true });
     this.loadCloudSchedules(this.data.year, this.data.month, this.data.selectedDay);
+    this.startAgendaClock();
     showDueLocalReminder();
   },
 

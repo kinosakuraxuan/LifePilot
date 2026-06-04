@@ -1,5 +1,12 @@
 <view class="home-root">
-  <scroll-view class="calendar-shell" type="list" scroll-y="true">
+  <scroll-view
+    class="calendar-shell"
+    type="list"
+    scroll-y="true"
+    refresher-enabled="{{true}}"
+    refresher-triggered="{{refreshingAgenda}}"
+    bindrefresherrefresh="onAgendaRefresh"
+  >
     <view class="top-bar" style="{{topBarStyle}}">
       <view class="month-left">
         <text class="month-text">{{monthTitle}}</text>
@@ -30,13 +37,13 @@
       <view class="agenda-summary">
         <view>
           <text class="agenda-summary-label">{{selectedDateLabel}}</text>
-          <text class="agenda-summary-title">{{agendaSummary.title}}</text>
+          <text class="agenda-summary-title" overflow="ellipsis" max-lines="1">{{agendaSummary.title}}</text>
         </view>
         <text class="agenda-summary-count">{{agendaSummary.countText}}</text>
       </view>
       <block wx:if="{{events.length}}">
         <view class="swipe-row" wx:for="{{events}}" wx:key="id" data-id="{{item.id}}" data-date="{{item.occurrenceDateKey}}" bindlongpress="editSchedule">
-          <view class="agenda-item {{item.highlight ? 'just-added' : ''}}">
+          <view class="agenda-item agenda-status-{{item.status}} {{item.highlight ? 'just-added' : ''}}">
             <view class="accent"></view>
             <view class="agenda-main">
               <text class="agenda-title" overflow="ellipsis" max-lines="1">{{item.title}}</text>

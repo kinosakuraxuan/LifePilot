@@ -324,7 +324,7 @@
   margin-bottom: 0;
   padding: 8rpx 10rpx;
   border-radius: 18rpx;
-  transition: background-color 180ms ease, transform 180ms ease;
+  transition: opacity 180ms ease, transform 180ms ease;
 }
 
 .agenda-item:active {
@@ -340,6 +340,7 @@
   height: 82rpx;
   border-radius: 999rpx;
   background: #facc15;
+  transition: opacity 180ms ease, transform 180ms ease;
 }
 
 .agenda-main {
@@ -354,8 +355,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #111827;
   font-size: 34rpx;
   font-weight: 800;
+  transition: opacity 180ms ease, transform 180ms ease;
 }
 
 .agenda-location {
@@ -371,6 +374,38 @@
   text-align: right;
   margin-right: 20rpx;
   margin-top: 0rpx;
+  font-feature-settings: "tnum";
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.agenda-status-active .accent {
+  opacity: 1;
+  transform: scaleY(1.08);
+}
+
+.agenda-status-active .agenda-title {
+  color: #0f172a;
+  font-weight: 900;
+}
+
+.agenda-status-ended {
+  opacity: 0.78;
+}
+
+.agenda-status-ended .accent {
+  opacity: 0.34;
+}
+
+.agenda-status-ended .agenda-title {
+  color: #64748b;
+}
+
+.agenda-status-ended .agenda-time {
+  color: #94a3b8;
+}
+
+.agenda-status-upcoming .agenda-time {
+  color: #1f2937;
 }
 
 .empty-agenda {

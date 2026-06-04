@@ -106,6 +106,29 @@ function formatMoveToast(dateKey) {
   return parts ? `已移动到 ${parts.month}月${parts.day}日` : "已移动";
 }
 
+function dragGhostStyleOf(x, y) {
+  return `transform: translate(${x - 80}px, ${y - 26}px) scale(1.04); opacity: 0.96;`;
+}
+
+function adjacentMonth(year, month, delta) {
+  let nextYear = year;
+  let nextMonth = month + delta;
+  if (nextMonth < 1) {
+    nextYear -= 1;
+    nextMonth = 12;
+  }
+  if (nextMonth > 12) {
+    nextYear += 1;
+    nextMonth = 1;
+  }
+  return { year: nextYear, month: nextMonth };
+}
+
+function adjacentMonthLabel(year, month, delta) {
+  const next = adjacentMonth(year, month, delta);
+  return `${next.month}月`;
+}
+
 function buildDatePatch(dateKey) {
   const parts = parseDateKey(dateKey);
   if (!parts) return null;
@@ -269,6 +292,10 @@ function buildMonth(year, month, selectedDay, today, swipedId) {
 }
 
 const today = getToday();
+const DRAG_EDGE_SIZE = 68;
+const DRAG_EDGE_SCROLL_STEP = 12;
+const DRAG_EDGE_SCROLL_INTERVAL = 48;
+const DRAG_MONTH_HOLD_MS = 720;
 
 Page({
   data: {
@@ -283,6 +310,7 @@ Page({
     selectedDateKey: today.dateKey,
     selectedNotes: [],
     swipedId: "",
+    calendarScrollLeft: 0,
     dragActive: false,
     dragSourceId: "",
     dragSourceDateKey: "",
@@ -291,6 +319,12 @@ Page({
     dragGhostTitle: "",
     dragGhostTime: "",
     dragGhostStyle: "transform: translate(0px, 0px); opacity: 0;",
+    dragHintText: "拖到日期格后松手",
+    dragEdgeVisible: false,
+    dragEdgeSide: "",
+    dragEdgeMode: "",
+    dragEdgeLabel: "",
+    dragEdgeProgressStyle: "transform: scaleX(0);",
     agendaTouchStartX: 0,
     agendaTouchStartY: 0,
     sheetVisible: false,
@@ -328,7 +362,16 @@ Page({
     }
     this.refreshCalendar({ skipCloud: true });
     this.loadCloudSchedules(this.data.year, this.data.month, this.data.selectedDay);
+    this.measureCalendarScroll();
     showDueLocalReminder();
+  },
+
+  onHide() {
+    this.stopDragEdge();
+  },
+
+  onUnload() {
+    this.stopDragEdge();
   },
 
   refreshCalendar(options) {
@@ -426,7 +469,11 @@ Page({
       month = 1;
     }
     const selectedDay = year === today.year && month === today.month ? today.day : 1;
-    this.setData({ year, month, selectedDay, monthTitle: formatMonth(year, month), swipedId: "" }, () => this.refreshCalendar());
+    this.calendarScrollLeft = 0;
+    this.setData({ year, month, selectedDay, monthTitle: formatMonth(year, month), swipedId: "", calendarScrollLeft: 0 }, () => {
+      this.refreshCalendar();
+      this.measureCalendarScroll();
+    });
   },
 
   openDay(e) {
@@ -524,6 +571,45 @@ Page({
     }
   },
 
+  onCalendarScroll(e) {
+    const scrollLeft = Number(e.detail && e.detail.scrollLeft) || 0;
+    this.calendarScrollLeft = scrollLeft;
+    if (!this.lastCalendarScrollSync || Date.now() - this.lastCalendarScrollSync > 80) {
+      this.lastCalendarScrollSync = Date.now();
+      this.setData({ calendarScrollLeft: scrollLeft });
+    }
+  },
+
+  measureCalendarScroll(callback) {
+    wx.createSelectorQuery()
+      .in(this)
+      .select(".calendar-x-scroll")
+      .boundingClientRect()
+      .select(".calendar-wide-inner")
+      .boundingClientRect()
+      .exec((res) => {
+        const viewport = res && res[0];
+        const inner = res && res[1];
+        this.calendarViewportRect = viewport || null;
+        this.calendarInnerWidth = inner && inner.width ? inner.width : 0;
+        this.calendarMaxScrollLeft = viewport && inner ? Math.max(0, inner.width - viewport.width) : 0;
+        if (callback) callback();
+      });
+  },
+
+  updateDragGhostPosition(x, y, extraUpdates, force) {
+    if (typeof x !== "number" || typeof y !== "number") return;
+    this.dragCurrent = { x, y };
+    const nextStyle = dragGhostStyleOf(x, y);
+    const updates = Object.assign({}, extraUpdates || {});
+    if (force || this.data.dragGhostStyle !== nextStyle) {
+      updates.dragGhostStyle = nextStyle;
+    }
+    if (Object.keys(updates).length) {
+      this.setData(updates);
+    }
+  },
+
   findScheduleForDrag(id) {
     if (!id) return null;
     return getItemById(KEYS.schedules, id);
@@ -563,8 +649,8 @@ Page({
       time: schedule.startTime || schedule.start || ""
     };
     this.dragTimer = setTimeout(() => {
-      this.cacheCalendarDropRects();
-      this.setData({
+      this.measureCalendarScroll(() => this.cacheCalendarDropRects());
+      this.updateDragGhostPosition(touch.clientX, touch.clientY, {
         dragActive: true,
         dragSourceId: id,
         dragSourceDateKey: sourceDateKey,
@@ -572,7 +658,7 @@ Page({
         dragTargetDay: 0,
         dragGhostTitle: this.dragEvent.title,
         dragGhostTime: this.dragEvent.time,
-        dragGhostStyle: `transform: translate(${touch.clientX - 80}px, ${touch.clientY - 26}px) scale(1.04); opacity: 0.96;`,
+        dragHintText: "拖到日期格后松手",
         swipedId: "",
         popupEvents: withSwipeState(this.data.popupEvents, ""),
         sheetSwipeLocked: true
@@ -580,11 +666,55 @@ Page({
     }, 260);
   },
 
-  moveScheduleDrag(e) {
+  trackSchedulePressMove(e) {
+    if (this.data.dragActive) {
+      this.moveScheduleDrag(e);
+      return;
+    }
     const touch = e.touches && e.touches[0];
     if (!touch) return;
     this.dragCurrent = { x: touch.clientX, y: touch.clientY };
+    if (!this.dragStart) return;
+    const deltaX = touch.clientX - this.dragStart.x;
+    const deltaY = touch.clientY - this.dragStart.y;
+    if (Math.abs(deltaX) > 12 || Math.abs(deltaY) > 12) {
+      clearTimeout(this.dragTimer);
+    }
+  },
+
+  cancelSchedulePress(e) {
+    if (this.data.dragActive) {
+      this.endScheduleDrag(e);
+      return;
+    }
+    clearTimeout(this.dragTimer);
+    this.dragStart = null;
+    this.dragEvent = null;
+    this.dragSchedule = null;
+    this.dragCurrent = null;
+    this.setData({ sheetSwipeLocked: false });
+  },
+
+  cancelScheduleTouch() {
+    clearTimeout(this.dragTimer);
+    if (this.data.dragActive) {
+      this.cancelScheduleDrag();
+      return;
+    }
+    this.dragStart = null;
+    this.dragEvent = null;
+    this.dragSchedule = null;
+    this.dragCurrent = null;
+    this.setData({ sheetSwipeLocked: false });
+  },
+
+  moveScheduleDrag(e) {
+    const touch = e.touches && e.touches[0];
+    if (!touch) return;
+    if (this.data.dragActive && e.timeStamp && this.lastDragMoveStamp === e.timeStamp) return;
+    if (this.data.dragActive && e.timeStamp) this.lastDragMoveStamp = e.timeStamp;
     if (!this.data.dragActive) {
+      this.dragCurrent = { x: touch.clientX, y: touch.clientY };
       if (!this.dragStart) return;
       const deltaX = touch.clientX - this.dragStart.x;
       const deltaY = touch.clientY - this.dragStart.y;
@@ -594,17 +724,19 @@ Page({
       return;
     }
     const target = this.findDropDate(touch.clientX, touch.clientY);
-    const updates = {
-      dragGhostStyle: `transform: translate(${touch.clientX - 80}px, ${touch.clientY - 26}px) scale(1.04); opacity: 0.96;`
-    };
+    const updates = {};
     if ((target && target.dateKey) !== this.data.dragTargetDateKey) {
       updates.dragTargetDateKey = target ? target.dateKey : "";
       updates.dragTargetDay = target ? target.day : 0;
+      updates.dragHintText = target ? "松手移动到该日期" : "拖到日期格后松手";
     }
-    this.setData(updates);
+    this.updateDragGhostPosition(touch.clientX, touch.clientY, updates);
+    this.updateDragEdge(touch.clientX);
   },
 
   endScheduleDrag(e) {
+    if (e && e.timeStamp && this.lastDragEndStamp === e.timeStamp) return;
+    if (e && e.timeStamp) this.lastDragEndStamp = e.timeStamp;
     clearTimeout(this.dragTimer);
     if (!this.data.dragActive) {
       this.dragStart = null;
@@ -614,7 +746,9 @@ Page({
       return;
     }
     const touch = (e.changedTouches && e.changedTouches[0]) || this.dragCurrent;
-    const target = touch ? this.findDropDate(touch.clientX, touch.clientY) : null;
+    const touchX = touch && (typeof touch.clientX === "number" ? touch.clientX : touch.x);
+    const touchY = touch && (typeof touch.clientY === "number" ? touch.clientY : touch.y);
+    const target = touch ? this.findDropDate(touchX, touchY) : null;
     if (!target || !target.dateKey) {
       this.resetScheduleDrag(() => {
         wx.showToast({ title: "未选择有效日期", icon: "none" });
@@ -629,6 +763,36 @@ Page({
     this.resetScheduleDrag();
   },
 
+  onCalendarRootTouchMove(e) {
+    if (!this.data.dragActive) return;
+    this.moveScheduleDrag(e);
+  },
+
+  onCalendarRootTouchEnd(e) {
+    if (!this.data.dragActive) return;
+    this.endScheduleDrag(e);
+  },
+
+  onCalendarRootTouchCancel() {
+    if (!this.data.dragActive) return;
+    this.cancelScheduleDrag();
+  },
+
+  onGlobalDragMove(e) {
+    if (!this.data.dragActive) return;
+    this.moveScheduleDrag(e);
+  },
+
+  onGlobalDragEnd(e) {
+    if (!this.data.dragActive) return;
+    this.endScheduleDrag(e);
+  },
+
+  onGlobalDragCancel() {
+    if (!this.data.dragActive) return;
+    this.cancelScheduleDrag();
+  },
+
   findDropDate(x, y) {
     const rects = this.dragDayRects || [];
     for (let index = 0; index < rects.length; index += 1) {
@@ -641,7 +805,174 @@ Page({
     return null;
   },
 
+  updateDragEdge(x) {
+    const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : { windowWidth: 375 };
+    const width = windowInfo.windowWidth || 375;
+    let direction = 0;
+    if (x <= DRAG_EDGE_SIZE) direction = -1;
+    if (x >= width - DRAG_EDGE_SIZE) direction = 1;
+    if (!direction) {
+      this.stopDragEdge();
+      this.setData({
+        dragHintText: this.data.dragTargetDateKey ? "松手移动到该日期" : "拖到日期格后松手"
+      });
+      return;
+    }
+    const maxScrollLeft = this.calendarMaxScrollLeft || 0;
+    const currentLeft = this.calendarScrollLeft || this.data.calendarScrollLeft || 0;
+    const canScrollMonth = direction > 0 ? currentLeft < maxScrollLeft - 2 : currentLeft > 2;
+    if (canScrollMonth) {
+      this.stopDragMonthHold();
+      this.startDragEdgeScroll(direction);
+      this.setData({
+        dragEdgeVisible: true,
+        dragEdgeSide: direction > 0 ? "right" : "left",
+        dragEdgeMode: "scroll",
+        dragEdgeLabel: direction > 0 ? "继续浏览本月" : "浏览本月",
+        dragEdgeProgressStyle: "transform: scaleX(0);",
+        dragHintText: direction > 0 ? "右侧自动浏览本月" : "左侧自动浏览本月"
+      });
+      return;
+    }
+    this.stopDragEdgeScroll();
+    this.startDragMonthHold(direction);
+  },
+
+  startDragEdgeScroll(direction) {
+    if (this.dragEdgeScrollDirection === direction && this.dragEdgeScrollTimer) return;
+    this.stopDragEdgeScroll();
+    this.dragEdgeScrollDirection = direction;
+    this.dragEdgeScrollTimer = setInterval(() => {
+      const maxScrollLeft = this.calendarMaxScrollLeft || 0;
+      const currentLeft = this.calendarScrollLeft || this.data.calendarScrollLeft || 0;
+      const nextLeft = Math.max(0, Math.min(maxScrollLeft, currentLeft + direction * DRAG_EDGE_SCROLL_STEP));
+      this.calendarScrollLeft = nextLeft;
+      this.setData({ calendarScrollLeft: nextLeft }, () => {
+        this.cacheCalendarDropRects();
+        const touch = this.dragCurrent;
+        if (touch) {
+          this.updateDragGhostPosition(touch.x, touch.y);
+          const target = this.findDropDate(touch.x, touch.y);
+          if ((target && target.dateKey) !== this.data.dragTargetDateKey) {
+            this.setData({
+              dragTargetDateKey: target ? target.dateKey : "",
+              dragTargetDay: target ? target.day : 0
+            });
+          }
+        }
+      });
+      if (nextLeft <= 0 || nextLeft >= maxScrollLeft) {
+        this.stopDragEdgeScroll();
+        const touch = this.dragCurrent;
+        if (touch) this.updateDragEdge(touch.x);
+      }
+    }, DRAG_EDGE_SCROLL_INTERVAL);
+  },
+
+  startDragMonthHold(direction) {
+    if (this.dragMonthHoldDirection === direction && this.dragMonthHoldTimer) return;
+    this.stopDragMonthHold();
+    this.dragMonthHoldDirection = direction;
+    this.dragMonthHoldStartedAt = Date.now();
+    this.setData({
+      dragEdgeVisible: true,
+      dragEdgeSide: direction > 0 ? "right" : "left",
+      dragEdgeMode: "month",
+      dragEdgeLabel: direction > 0 ? `前往 ${adjacentMonthLabel(this.data.year, this.data.month, 1)}` : `返回 ${adjacentMonthLabel(this.data.year, this.data.month, -1)}`,
+      dragEdgeProgressStyle: "transform: scaleX(0);",
+      dragHintText: "继续停留可切换月份"
+    });
+    this.dragMonthHoldTimer = setInterval(() => {
+      const progress = Math.min(1, (Date.now() - this.dragMonthHoldStartedAt) / DRAG_MONTH_HOLD_MS);
+      this.setData({ dragEdgeProgressStyle: `transform: scaleX(${progress});` });
+      if (progress >= 1) {
+        const nextDirection = this.dragMonthHoldDirection;
+        this.stopDragMonthHold();
+        this.switchDragMonth(nextDirection);
+      }
+    }, 48);
+  },
+
+  stopDragEdge() {
+    this.stopDragEdgeScroll();
+    this.stopDragMonthHold();
+    if (this.data.dragEdgeVisible) {
+      this.setData({
+        dragEdgeVisible: false,
+        dragEdgeSide: "",
+        dragEdgeMode: "",
+        dragEdgeLabel: "",
+        dragEdgeProgressStyle: "transform: scaleX(0);"
+      });
+    }
+  },
+
+  stopDragEdgeScroll() {
+    if (this.dragEdgeScrollTimer) {
+      clearInterval(this.dragEdgeScrollTimer);
+      this.dragEdgeScrollTimer = null;
+    }
+    this.dragEdgeScrollDirection = 0;
+  },
+
+  stopDragMonthHold() {
+    if (this.dragMonthHoldTimer) {
+      clearInterval(this.dragMonthHoldTimer);
+      this.dragMonthHoldTimer = null;
+    }
+    this.dragMonthHoldDirection = 0;
+    this.dragMonthHoldStartedAt = 0;
+  },
+
+  switchDragMonth(direction) {
+    if (!direction || this.dragMonthSwitching) return;
+    this.dragMonthSwitching = true;
+    const latestDragCurrent = this.dragCurrent ? Object.assign({}, this.dragCurrent) : null;
+    const next = adjacentMonth(this.data.year, this.data.month, direction);
+    const currentToday = getToday();
+    const selectedDay = next.year === currentToday.year && next.month === currentToday.month ? currentToday.day : 1;
+    const scrollLeft = direction > 0 ? 0 : (this.calendarMaxScrollLeft || this.data.calendarScrollLeft || 0);
+    this.setData({
+      year: next.year,
+      month: next.month,
+      selectedDay,
+      selectedDateKey: dateKeyOf(next.year, next.month, selectedDay),
+      monthTitle: formatMonth(next.year, next.month),
+      swipedId: "",
+      calendarScrollLeft: scrollLeft,
+      dragTargetDateKey: "",
+      dragTargetDay: 0,
+      dragEdgeVisible: false,
+      dragEdgeProgressStyle: "transform: scaleX(0);",
+      dragHintText: "拖到日期格后松手"
+    }, () => {
+      this.refreshCalendar({ skipCloud: true });
+      this.loadCloudSchedules(next.year, next.month, selectedDay);
+      setTimeout(() => {
+        this.measureCalendarScroll(() => {
+          const finishMonthSwitch = () => {
+            this.cacheCalendarDropRects();
+            const touch = latestDragCurrent || this.dragCurrent;
+            if (touch) {
+              this.updateDragGhostPosition(touch.x, touch.y, null, true);
+            }
+            this.dragMonthSwitching = false;
+            if (touch) this.updateDragEdge(touch.x);
+          };
+          if (direction < 0) {
+            this.calendarScrollLeft = this.calendarMaxScrollLeft || 0;
+            this.setData({ calendarScrollLeft: this.calendarScrollLeft }, finishMonthSwitch);
+          } else {
+            this.calendarScrollLeft = 0;
+            finishMonthSwitch();
+          }
+        });
+      }, 80);
+    });
+  },
+
   resetScheduleDrag(callback) {
+    this.stopDragEdge();
     if (this.data.dragActive) this.preventScheduleTapUntil = Date.now() + 360;
     this.dragStart = null;
     this.dragCurrent = null;
@@ -657,6 +988,12 @@ Page({
       dragGhostTitle: "",
       dragGhostTime: "",
       dragGhostStyle: "transform: translate(0px, 0px); opacity: 0;",
+      dragHintText: "拖到日期格后松手",
+      dragEdgeVisible: false,
+      dragEdgeSide: "",
+      dragEdgeMode: "",
+      dragEdgeLabel: "",
+      dragEdgeProgressStyle: "transform: scaleX(0);",
       sheetSwipeLocked: false
     }, callback);
   },
