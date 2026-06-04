@@ -1,6 +1,7 @@
 const { KEYS, appendItem } = require("../../utils/storage");
 const { formatDate } = require("../../utils/date");
 const { api } = require("../../utils/cloud");
+const { getSafeAreaLayout } = require("../../utils/safeArea");
 
 const MODULES = {
   study: {
@@ -71,11 +72,14 @@ Page({
     date: formatDate(new Date()),
     startTime: "",
     endTime: "",
-    note: ""
+    note: "",
+    topBarStyle: "",
+    leftActionStyle: ""
   },
 
   onLoad(query) {
     const module = MODULES[query.module] ? query.module : "study";
+    const layout = getSafeAreaLayout();
     this.setData({
       module,
       config: MODULES[module],
@@ -84,7 +88,9 @@ Page({
       date: formatDate(new Date()),
       startTime: "",
       endTime: "",
-      note: ""
+      note: "",
+      topBarStyle: layout.topBarStyle,
+      leftActionStyle: layout.leftActionStyle
     });
   },
 

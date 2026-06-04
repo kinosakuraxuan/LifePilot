@@ -1,4 +1,4 @@
-const { listBoundlessNoteGroups, getBoundlessNoteById, deleteBoundlessNote } = require("../../utils/storage");
+const { listBoundlessNoteGroups, getBoundlessNoteById, deleteBoundlessNote, mergeBoundlessNotesToStorage } = require("../../utils/storage");
 const { api } = require("../../utils/cloud");
 
 function previewText(item) {
@@ -14,11 +14,11 @@ Page({
   },
 
   onLoad() {
-    this.loadNotes();
+    this.refreshNotes();
   },
 
   onShow() {
-    this.loadNotes();
+    this.refreshNotes();
   },
 
   loadNotes() {
@@ -34,6 +34,22 @@ Page({
       }))
     }));
     this.setData({ groups });
+  },
+
+  refreshCloudNotes() {
+    api.note.list({ limit: 100 }).then((res) => {
+      const notes = (res && res.data && res.data.notes) || [];
+      if (!notes.length) return;
+      mergeBoundlessNotesToStorage(notes);
+      this.loadNotes();
+    }).catch((error) => {
+      console.warn("note cloud list fallback to local", error.message);
+    });
+  },
+
+  refreshNotes() {
+    this.loadNotes();
+    this.refreshCloudNotes();
   },
 
   createNote() {

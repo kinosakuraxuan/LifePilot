@@ -104,6 +104,32 @@ async function handleListByDate(event, openid) {
   });
 }
 
+async function handleList(event, openid) {
+  const limit = Math.min(100, Math.max(1, Number(event.limit || 80)));
+  const res = await db.collection("notes")
+    .where({ openid, type: "boundless" })
+    .orderBy("updatedAt", "desc")
+    .limit(limit)
+    .get();
+
+  return success({
+    notes: (res.data || []).map((item) => ({
+      id: item._id,
+      _id: item._id,
+      clientId: item.clientId || "",
+      date: item.date,
+      type: item.type,
+      content: item.content || "",
+      assets: item.assets || [],
+      attachments: item.assets || [],
+      tags: item.tags || [],
+      visibleToAI: item.visibleToAI === true,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt
+    }))
+  });
+}
+
 exports.main = async (event) => {
   const action = event && event.action;
   const wxContext = cloud.getWXContext();
@@ -119,6 +145,8 @@ exports.main = async (event) => {
         return await handleDelete(event, openid);
       case "listByDate":
         return await handleListByDate(event, openid);
+      case "list":
+        return await handleList(event, openid);
       default:
         return fail(404, `unknown action: ${action || ""}`);
     }

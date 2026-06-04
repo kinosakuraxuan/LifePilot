@@ -1,5 +1,6 @@
 const { api } = require("../../utils/cloud");
 const { pomodoroRecords, deletePomodoroRecord } = require("../../utils/activityStats");
+const { mergeRecordsToStorage } = require("../../utils/storage");
 
 Page({
   data: {
@@ -12,15 +13,27 @@ Page({
   skipNextTap: false,
 
   onLoad() {
-    this.refreshList();
+    this.refreshRecords();
   },
 
   onShow() {
-    this.refreshList();
+    this.refreshRecords();
   },
 
   refreshList() {
     this.setData({ records: pomodoroRecords() });
+  },
+
+  refreshRecords() {
+    this.refreshList();
+    api.record.listPomodoro({ limit: 100 }).then((res) => {
+      const records = (res && res.data && res.data.records) || [];
+      if (!records.length) return;
+      mergeRecordsToStorage(records);
+      this.refreshList();
+    }).catch((error) => {
+      console.warn("pomodoro cloud list fallback to local", error.message);
+    });
   },
 
   onRecordTouchStart(e) {

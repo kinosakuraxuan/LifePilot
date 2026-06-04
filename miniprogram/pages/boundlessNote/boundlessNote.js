@@ -75,7 +75,7 @@ function createAttachment(type, title, value, meta) {
 }
 
 function attachmentSource(item) {
-  return item && (item.tempFileURL || item.localPath || item.url || item.path || item.fileID || item.src || item.value || "");
+  return item && (item.tempFileURL || item.fileID || (String(item.value || "").indexOf("cloud://") === 0 ? item.value : "") || item.url || item.src || item.localPath || item.path || item.value || "");
 }
 
 function isImageAttachment(item) {
@@ -149,6 +149,22 @@ async function resolveCloudImageAttachments(imageAttachments) {
 
 function attachmentSignature(items) {
   return JSON.stringify((items || []).map((item) => normalizeAttachment(item)));
+}
+
+function cloudSafeAttachment(item) {
+  const next = normalizeAttachment(item);
+  const value = String(next.value || "");
+  if (next.fileID || value.indexOf("cloud://") === 0) {
+    return Object.assign({}, next, {
+      value: next.fileID || value,
+      fileID: next.fileID || value,
+      localPath: "",
+      path: "",
+      src: "",
+      tempFileURL: ""
+    });
+  }
+  return next;
 }
 
 function refreshPreviousPage() {
@@ -485,6 +501,33 @@ Page({
     });
   },
 
+  async ensureCloudImageAttachments(attachments) {
+    const list = (attachments || []).map(normalizeAttachment);
+    if (!wx.cloud || !wx.cloud.uploadFile) return list;
+    const next = [];
+    for (let index = 0; index < list.length; index += 1) {
+      const item = list[index];
+      const value = String(item.value || "");
+      const localPath = item.localPath || item.path || (!value.startsWith("cloud://") ? value : "");
+      if (!isImageAttachment(item) || item.fileID || value.startsWith("cloud://") || !localPath) {
+        next.push(item);
+        continue;
+      }
+      try {
+        const fileID = await this.uploadAttachmentFile(localPath, "images");
+        next.push(Object.assign({}, item, {
+          value: fileID,
+          fileID,
+          localPath
+        }));
+      } catch (error) {
+        console.warn("image upload before save failed, keep local fallback", error.message);
+        next.push(item);
+      }
+    }
+    return next;
+  },
+
   addAttachments(items, extraUpdates) {
     const attachments = this.data.editingNoteAttachments.concat((items || []).map(normalizeAttachment));
     const view = buildAttachmentView(attachments);
@@ -620,17 +663,18 @@ Page({
     this.persistNote("done", "已完成");
   },
 
-  persistNote(status, toastTitle) {
+  async persistNote(status, toastTitle) {
     const content = this.data.editingNoteContent;
-    const attachments = (this.data.editingNoteAttachments || []).map(normalizeAttachment);
+    const attachments = await this.ensureCloudImageAttachments(this.data.editingNoteAttachments || []);
     if (!content.trim() && !attachments.length) {
       wx.showToast({ title: "请写下内容", icon: "none" });
       return;
     }
+    const safeAttachments = attachments.map(cloudSafeAttachment);
     const patch = {
       date: this.data.editingNoteDate,
       content,
-      attachments,
+      attachments: safeAttachments,
       status
     };
     const note = this.data.editingNoteId
@@ -647,18 +691,23 @@ Page({
         date: note.date,
         type: "boundless",
         content: note.content,
-        attachments: note.attachments || [],
-        assets: note.attachments || []
+        attachments: safeAttachments,
+        assets: safeAttachments
+      }).then((res) => {
+        const cloudId = res && res.data && res.data.id;
+        if (cloudId) updateBoundlessNote(note.id, { cloudId });
       }).catch((error) => {
         console.warn("note save pending local only", error.message);
       });
     }
+    const view = buildAttachmentView(attachments);
     this.setData({
       editingNoteId: note.id,
       noteSavedContent: note.content || "",
-      noteSavedAttachments: note.attachments || [],
+      noteSavedAttachments: safeAttachments,
+      editingNoteAttachments: safeAttachments,
       noteDirty: false
-    });
+    }, () => this.resolveAndSetImageViews(view.imageAttachments));
     wx.showToast({ title: toastTitle, icon: "success" });
     setTimeout(() => this.leavePage(true), 320);
   },

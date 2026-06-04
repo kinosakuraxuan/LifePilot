@@ -123,6 +123,15 @@
   background: #fafafa;
 }
 
+.wide-day.drop-ready {
+  background: #fffafa;
+}
+
+.wide-day.drop-hover {
+  background: #fee2e2;
+  box-shadow: inset 0 0 0 3rpx #ef4444;
+}
+
 .wide-date {
   display: flex;
   justify-content: flex-start;
@@ -163,6 +172,11 @@
   overflow: hidden;
   min-height: 34rpx;
   margin-top: 4rpx;
+}
+
+.wide-swipe-row.is-dragging-source .wide-event {
+  opacity: 0.34;
+  transform: scale(0.98);
 }
 
 .wide-swipe-actions {
@@ -665,6 +679,11 @@
   background: #ffffff;
 }
 
+.sheet-swipe-row.is-dragging-source .sheet-event-card {
+  opacity: 0.34;
+  transform: scale(0.98);
+}
+
 .sheet-swipe-actions {
   position: absolute;
   top: 0;
@@ -884,4 +903,62 @@
   background: #f8fafc;
   font-size: 30rpx;
   line-height: 1.7;
+}
+
+.schedule-drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1400;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  width: 330rpx;
+  min-height: 82rpx;
+  padding: 16rpx 18rpx;
+  border-radius: 18rpx;
+  background: #ffffff;
+  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.18);
+  pointer-events: none;
+  transition: transform 80ms ease-out, opacity 80ms ease-out;
+}
+
+.schedule-drag-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  margin-left: 12rpx;
+}
+
+.schedule-drag-title {
+  color: #111827;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 36rpx;
+}
+
+.schedule-drag-time {
+  color: #6b7280;
+  font-size: 22rpx;
+  line-height: 30rpx;
+}
+
+.schedule-drag-hint {
+  position: fixed;
+  left: 50%;
+  top: 118rpx;
+  z-index: 1410;
+  box-sizing: border-box;
+  min-width: 260rpx;
+  padding: 14rpx 24rpx;
+  border-radius: 999rpx;
+  background: #111827;
+  color: #ffffff;
+  font-size: 24rpx;
+  line-height: 32rpx;
+  text-align: center;
+  pointer-events: none;
+  transform: translateX(-50%);
+  opacity: 0.92;
 }

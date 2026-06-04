@@ -1,5 +1,6 @@
-const { KEYS, readList } = require("../../utils/storage");
+const { KEYS, readList, mergeRecordsToStorage } = require("../../utils/storage");
 const { formatDate } = require("../../utils/date");
+const { api } = require("../../utils/cloud");
 
 const modules = [
   { key: "study", label: "学习", desc: "课程、作业、阅读与复习", cls: "study" },
@@ -36,7 +37,7 @@ Page({
   },
 
   onShow() {
-    this.refreshRecent();
+    this.refreshRecords();
   },
 
   refreshRecent() {
@@ -46,6 +47,22 @@ Page({
       displayDate: item.date || item.dateKey || String(item.createdAt || "").slice(0, 10)
     }));
     this.setData({ recent });
+  },
+
+  refreshRecords() {
+    this.refreshRecent();
+    Promise.all([
+      api.record.listRecords({ limit: 120 }),
+      api.record.listPomodoro({ limit: 100 })
+    ]).then((results) => {
+      const manual = (results[0] && results[0].data && results[0].data.records) || [];
+      const pomodoro = (results[1] && results[1].data && results[1].data.records) || [];
+      if (!manual.length && !pomodoro.length) return;
+      mergeRecordsToStorage(manual.concat(pomodoro));
+      this.refreshRecent();
+    }).catch((error) => {
+      console.warn("record cloud list fallback to local", error.message);
+    });
   },
 
   openModule(e) {

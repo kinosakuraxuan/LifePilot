@@ -92,6 +92,7 @@
           wx:for="{{attachmentOptions}}"
           wx:key="type"
           class="attachment-option"
+          hover-class="attachment-option-pressed"
           data-type="{{item.type}}"
           catchtap="handleAttachmentOption"
         >
@@ -105,8 +106,8 @@
         catchtap="toggleAttachmentPanel"
         aria-label="附件"
       >
-        <view class="clip-loop"></view>
-        <view class="clip-tail"></view>
+        <text class="paperclip-label">附件</text>
+        <text class="paperclip-plus">{{attachmentPanelOpen ? '×' : '+'}}</text>
       </button>
     </view>
   </scroll-view>

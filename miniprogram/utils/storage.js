@@ -172,6 +172,103 @@ function normalizeBoundlessAttachments(value) {
   return (Array.isArray(value) ? value : []).map(normalizeBoundlessAttachment);
 }
 
+function noteMergeKey(item) {
+  return String((item && (item.clientId || item.id || item._id || item.cloudId)) || "").trim();
+}
+
+function normalizeBoundlessNoteForStorage(item) {
+  const key = noteMergeKey(item);
+  const id = item.clientId || item.id || key;
+  return Object.assign({}, item, {
+    id,
+    clientId: item.clientId || item.id || id,
+    cloudId: item._id || item.cloudId || item.id || "",
+    date: normalizeNoteDate(item.date || item.dateKey || item.createdAt),
+    content: item.content || item.text || item.note || "",
+    status: item.status || "done",
+    attachments: normalizeBoundlessAttachments(item.attachments || item.assets)
+  });
+}
+
+function mergeBoundlessNotesToStorage(cloudNotes) {
+  const incoming = (cloudNotes || []).filter(Boolean).map(normalizeBoundlessNoteForStorage);
+  if (!incoming.length) return readList(KEYS.boundlessNotes, []);
+  const local = readList(KEYS.boundlessNotes, []).map(normalizeBoundlessNoteForStorage);
+  const byId = {};
+  const order = [];
+  local.forEach((item) => {
+    const key = noteMergeKey(item);
+    if (!key) return;
+    if (!byId[key]) order.push(key);
+    byId[key] = item;
+  });
+  incoming.forEach((item) => {
+    const key = noteMergeKey(item);
+    if (!key) return;
+    const previous = byId[key] || {};
+    if (!byId[key]) order.unshift(key);
+    byId[key] = Object.assign({}, previous, item, {
+      id: item.clientId || previous.clientId || item.id || previous.id || key,
+      clientId: item.clientId || previous.clientId || item.id || previous.id || key,
+      cloudId: item._id || item.cloudId || previous.cloudId || "",
+      attachments: normalizeBoundlessAttachments(item.attachments || item.assets || previous.attachments || previous.assets)
+    });
+  });
+  const next = order.map((key) => byId[key]).filter(Boolean)
+    .sort((a, b) => `${b.updatedAt || b.createdAt || b.date}`.localeCompare(`${a.updatedAt || a.createdAt || a.date}`));
+  writeList(KEYS.boundlessNotes, next);
+  return next;
+}
+
+function recordMergeKey(item) {
+  return String((item && (item.clientId || item.id || item._id || item.cloudId)) || "").trim();
+}
+
+function normalizeRecordForStorage(item) {
+  const key = recordMergeKey(item);
+  const id = item.clientId || item.id || key;
+  return Object.assign({}, item, {
+    id,
+    clientId: item.clientId || item.id || id,
+    cloudId: item._id || item.cloudId || item.id || "",
+    source: item.source || (item.category || item.durationMinutes ? "pomodoro" : "manual"),
+    module: item.module || item.category || item.type || "",
+    category: item.category || item.module || item.type || "",
+    date: item.date || item.dateKey || todayKey(item.endedAt || item.createdAt),
+    durationMinutes: Number(item.durationMinutes || item.minutes || item.duration || 0)
+  });
+}
+
+function mergeRecordsToStorage(cloudRecords) {
+  const incoming = (cloudRecords || []).filter(Boolean).map(normalizeRecordForStorage);
+  if (!incoming.length) return readList(KEYS.records, []);
+  const local = readList(KEYS.records, []).map(normalizeRecordForStorage);
+  const byId = {};
+  const order = [];
+  local.forEach((item) => {
+    const key = recordMergeKey(item);
+    if (!key) return;
+    if (!byId[key]) order.push(key);
+    byId[key] = item;
+  });
+  incoming.forEach((item) => {
+    const key = recordMergeKey(item);
+    if (!key) return;
+    const previous = byId[key] || {};
+    if (!byId[key]) order.unshift(key);
+    byId[key] = Object.assign({}, previous, item, {
+      id: item.clientId || previous.clientId || item.id || previous.id || key,
+      clientId: item.clientId || previous.clientId || item.id || previous.id || key,
+      cloudId: item._id || item.cloudId || previous.cloudId || "",
+      source: item.source || previous.source || "pomodoro"
+    });
+  });
+  const next = order.map((key) => byId[key]).filter(Boolean)
+    .sort((a, b) => `${b.endedAt || b.updatedAt || b.createdAt || b.date}`.localeCompare(`${a.endedAt || a.updatedAt || a.createdAt || a.date}`));
+  writeList(KEYS.records, next);
+  return next;
+}
+
 function mergeLegacyNotes(date) {
   const legacy = readList(KEYS.diaries, []);
   return legacy
@@ -336,6 +433,8 @@ module.exports = {
   getItemById,
   updateItem,
   mergeSchedulesToStorage,
+  mergeBoundlessNotesToStorage,
+  mergeRecordsToStorage,
   todayKey,
   readBoundlessNote,
   saveBoundlessNote,

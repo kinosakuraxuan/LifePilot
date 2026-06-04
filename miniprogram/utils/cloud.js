@@ -79,6 +79,12 @@ const api = {
     deletePomodoro(id, extra) {
       return callCloud("recordService", withAction("deletePomodoro", Object.assign({ id }, extra || {})));
     },
+    listPomodoro(data) {
+      return callCloud("recordService", withAction("listPomodoro", data));
+    },
+    listRecords(data) {
+      return callCloud("recordService", withAction("listRecords", data));
+    },
     getOverview(data) {
       return callCloud("recordService", withAction("getOverview", data));
     },
@@ -95,6 +101,9 @@ const api = {
     },
     listByDate(date) {
       return callCloud("noteService", withAction("listByDate", { date }));
+    },
+    list(data) {
+      return callCloud("noteService", withAction("list", data));
     }
   },
   reminder: {

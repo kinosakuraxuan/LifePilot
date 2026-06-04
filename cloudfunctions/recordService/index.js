@@ -146,12 +146,18 @@ async function handleCreatePomodoro(event, openid) {
   const endedAt = event.endedAt ? new Date(event.endedAt) : new Date();
   if (Number.isNaN(startedAt.getTime()) || Number.isNaN(endedAt.getTime())) return fail(400, "invalid time");
 
+  const clientId = String(event.clientId || "").slice(0, 80);
+  if (clientId) {
+    const existed = await db.collection("pomodoroSessions").where({ openid, clientId }).limit(1).get();
+    if (existed.data[0]) return success({ id: existed.data[0]._id, clientId, existed: true });
+  }
+
   const schedule = await findOwnSchedule(openid, event.scheduleId);
   const res = await db.collection("pomodoroSessions").add({
     data: {
       openid,
       userId: openid,
-      clientId: String(event.clientId || "").slice(0, 80),
+      clientId,
       scheduleId: schedule ? schedule._id : "",
       category,
       durationMinutes,
@@ -204,6 +210,66 @@ async function handleDeletePomodoro(event, openid) {
     }
   });
   return success({ id: session._id, deleted: true });
+}
+
+async function handleListPomodoro(event, openid) {
+  const limit = Math.min(100, Math.max(1, Number(event.limit || 80)));
+  const res = await db.collection("pomodoroSessions")
+    .where({ openid })
+    .orderBy("endedAt", "desc")
+    .limit(limit)
+    .get();
+
+  return success({
+    records: (res.data || []).filter((item) => item.isDeleted !== true).map((item) => ({
+      id: item._id,
+      _id: item._id,
+      clientId: item.clientId || "",
+      cloudId: item._id,
+      source: "pomodoro",
+      module: item.category || item.type || "",
+      category: item.category || item.type || "",
+      title: item.title || "",
+      date: item.date || dateKeyFrom(item.endedAt || item.createdAt),
+      durationMinutes: item.durationMinutes || 0,
+      startedAt: item.startedAt,
+      endedAt: item.endedAt,
+      completed: item.completed !== false,
+      exitReason: item.exitReason || "",
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt
+    }))
+  });
+}
+
+async function handleListRecords(event, openid) {
+  const limit = Math.min(120, Math.max(1, Number(event.limit || 80)));
+  const res = await db.collection("records")
+    .where({ openid })
+    .orderBy("date", "desc")
+    .limit(limit)
+    .get();
+
+  return success({
+    records: (res.data || []).map((item) => ({
+      id: item._id,
+      _id: item._id,
+      cloudId: item._id,
+      clientId: item.clientId || "",
+      source: "manualAggregate",
+      type: "manual",
+      date: item.date,
+      studyMinutes: item.studyMinutes || 0,
+      sportMinutes: item.sportMinutes || item.exerciseMinutes || 0,
+      exerciseMinutes: item.exerciseMinutes || item.sportMinutes || 0,
+      entertainmentMinutes: item.entertainmentMinutes || 0,
+      sleepHours: item.sleepHours || 0,
+      mood: item.mood || "",
+      note: item.note || "",
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt
+    }))
+  });
 }
 
 function buildScores(stats, goals) {
@@ -364,6 +430,10 @@ exports.main = async (event) => {
         return await handleCreatePomodoro(event, openid);
       case "deletePomodoro":
         return await handleDeletePomodoro(event, openid);
+      case "listPomodoro":
+        return await handleListPomodoro(event, openid);
+      case "listRecords":
+        return await handleListRecords(event, openid);
       case "getOverview":
         return await handleGetOverview(event, openid);
       case "getWeeklyReport":

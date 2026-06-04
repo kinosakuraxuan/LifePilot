@@ -1,7 +1,7 @@
-<view class="module-page">
+﻿<view class="module-page">
   <scroll-view class="module-scroll" type="list" scroll-y="true">
-    <view class="module-header">
-      <button class="back-btn" bindtap="goBack"><text>‹</text></button>
+    <view class="module-header" style="{{topBarStyle}}">
+      <button class="back-btn" style="{{leftActionStyle}}" bindtap="goBack"><text>取消</text></button>
       <view class="module-title-block">
         <text class="module-title">{{detail.label}}板块</text>
         <text class="module-subtitle">番茄钟时间 + 手动记录时间</text>
@@ -46,7 +46,7 @@
       <view class="record-card" wx:for="{{detail.records}}" wx:key="id">
         <view class="record-main">
           <text class="record-title">{{item.title}}</text>
-          <text class="record-meta">{{item.date}} · {{item.sourceLabel}}</text>
+          <text class="record-meta">{{item.date}} 路 {{item.sourceLabel}}</text>
         </view>
         <text class="record-duration">{{item.durationText}}</text>
       </view>

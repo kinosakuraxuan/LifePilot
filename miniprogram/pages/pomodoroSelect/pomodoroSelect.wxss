@@ -19,14 +19,21 @@
 .back {
   position: absolute;
   left: 28rpx;
-  width: 96rpx;
-  height: 72rpx;
-  border-radius: 18rpx;
+  min-width: 104rpx;
+  height: 64rpx;
+  min-height: 64rpx;
+  padding: 0 22rpx;
+  border-radius: 999rpx;
   background: #ffffff;
   color: #0f172a;
   font-size: 26rpx;
-  line-height: 72rpx;
-  box-shadow: 0 10rpx 24rpx rgba(15, 23, 42, 0.08);
+  font-weight: 800;
+  line-height: 64rpx;
+  box-shadow: 0 10rpx 24rpx rgba(15, 23, 42, 0.06);
+}
+
+.back::after {
+  border: 0;
 }
 
 .top-title {

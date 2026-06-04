@@ -1,4 +1,6 @@
 const { buildDiscoverData } = require("../../utils/activityStats");
+const { api } = require("../../utils/cloud");
+const { mergeRecordsToStorage } = require("../../utils/storage");
 
 const MODULE_META = {
   study: { icon: "学", status: "专注投入", color: "#ef4444" },
@@ -43,6 +45,27 @@ Page({
       overview: data.overview,
       modules: enrichModules(data.modules),
       days: data.days
+    });
+    this.syncCloudRecords();
+  },
+
+  syncCloudRecords() {
+    Promise.all([
+      api.record.listRecords({ limit: 120 }),
+      api.record.listPomodoro({ limit: 100 })
+    ]).then((results) => {
+      const manual = (results[0] && results[0].data && results[0].data.records) || [];
+      const pomodoro = (results[1] && results[1].data && results[1].data.records) || [];
+      if (!manual.length && !pomodoro.length) return;
+      mergeRecordsToStorage(manual.concat(pomodoro));
+      const data = buildDiscoverData();
+      this.setData({
+        overview: data.overview,
+        modules: enrichModules(data.modules),
+        days: data.days
+      });
+    }).catch((error) => {
+      console.warn("record cloud list fallback to local", error.message);
     });
   },
 

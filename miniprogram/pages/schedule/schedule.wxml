@@ -1,12 +1,12 @@
-<view class="schedule-page">
+﻿<view class="schedule-page">
   <view class="schedule-head">
-    <button class="back-button" bindtap="goBack"><text>‹</text></button>
-    <text class="page-title">全部日程</text>
+    <button class="back-button" bindtap="goBack"><text>取消</text></button>
+    <text class="page-title">鍏ㄩ儴鏃ョ▼</text>
   </view>
 
   <scroll-view class="schedule-scroll" type="list" scroll-y="true">
     <view wx:if="{{loading}}" class="state-card">
-      <text>加载中...</text>
+      <text>鍔犺浇涓?..</text>
     </view>
 
     <block wx:elif="{{items.length}}">
@@ -30,7 +30,7 @@
     </block>
 
     <view wx:else class="state-card">
-      <text>暂无日程</text>
+      <text>鏆傛棤鏃ョ▼</text>
     </view>
 
     <view class="bottom-spacer"></view>

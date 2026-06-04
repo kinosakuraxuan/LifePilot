@@ -5,6 +5,7 @@ const { showDueLocalReminder } = require("../../utils/reminder");
 const KEYS = storage.KEYS;
 const readList = storage.readList;
 const writeList = storage.writeList;
+const appendItem = storage.appendItem;
 const removeItem = storage.removeItem;
 const getItemById = storage.getItemById;
 const updateItem = storage.updateItem;
@@ -87,6 +88,75 @@ function getToday() {
 
 function dateKeyOf(year, month, day) {
   return `${year}-${pad(month)}-${pad(day)}`;
+}
+
+function parseDateKey(dateKey) {
+  const parts = String(dateKey || "").split("-").map(Number);
+  if (parts.length !== 3 || parts.some((value) => !value)) return null;
+  return { year: parts[0], month: parts[1], day: parts[2] };
+}
+
+function formatDateLabel(dateKey) {
+  const parts = parseDateKey(dateKey);
+  return parts ? `${parts.year}年${parts.month}月${parts.day}日` : "";
+}
+
+function formatMoveToast(dateKey) {
+  const parts = parseDateKey(dateKey);
+  return parts ? `已移动到 ${parts.month}月${parts.day}日` : "已移动";
+}
+
+function buildDatePatch(dateKey) {
+  const parts = parseDateKey(dateKey);
+  if (!parts) return null;
+  return {
+    date: formatDateLabel(dateKey),
+    dateKey,
+    startDateKey: dateKey,
+    endDateKey: dateKey,
+    startDate: formatDateLabel(dateKey),
+    endDate: formatDateLabel(dateKey),
+    year: parts.year,
+    month: parts.month,
+    day: parts.day
+  };
+}
+
+function createScheduleId(prefix) {
+  return `${prefix || "s"}${Date.now()}${Math.floor(Math.random() * 10000)}`;
+}
+
+function scheduleCloudId(schedule) {
+  return schedule && (schedule.cloudId || schedule._id || schedule.clientId || schedule.id);
+}
+
+function isRepeatingSchedule(schedule) {
+  if (!schedule) return false;
+  const rule = schedule.repeatRule || {};
+  if (rule.type && rule.type !== "never") return true;
+  const repeat = String(schedule.repeat || "").trim();
+  return !!repeat && repeat !== "永不重复" && repeat !== "不重复" && repeat !== "never";
+}
+
+function cloneSingleSchedule(schedule, targetDateKey, sourceDateKey) {
+  const newId = createScheduleId("s");
+  const single = Object.assign({}, schedule, buildDatePatch(targetDateKey), {
+    id: newId,
+    clientId: newId,
+    searchIndexId: "",
+    repeat: "永不重复",
+    repeatRule: { type: "never", interval: 1, endDate: "" },
+    excludedDates: [],
+    recurringParentId: "",
+    parentId: "",
+    originalRepeatId: "",
+    derivedFrom: schedule.clientId || schedule.id || schedule._id || "",
+    originalOccurrenceDateKey: sourceDateKey,
+    updatedAt: new Date().toISOString()
+  });
+  delete single._id;
+  delete single.cloudId;
+  return single;
 }
 
 function compactTitle(title) {
@@ -213,6 +283,14 @@ Page({
     selectedDateKey: today.dateKey,
     selectedNotes: [],
     swipedId: "",
+    dragActive: false,
+    dragSourceId: "",
+    dragSourceDateKey: "",
+    dragTargetDateKey: "",
+    dragTargetDay: 0,
+    dragGhostTitle: "",
+    dragGhostTime: "",
+    dragGhostStyle: "transform: translate(0px, 0px); opacity: 0;",
     agendaTouchStartX: 0,
     agendaTouchStartY: 0,
     sheetVisible: false,
@@ -446,7 +524,210 @@ Page({
     }
   },
 
+  findScheduleForDrag(id) {
+    if (!id) return null;
+    return getItemById(KEYS.schedules, id);
+  },
+
+  cacheCalendarDropRects() {
+    wx.createSelectorQuery()
+      .in(this)
+      .selectAll(".wide-day")
+      .boundingClientRect((rects) => {
+        this.dragDayRects = (rects || []).map((rect, index) => {
+          const day = this.data.days[index] || {};
+          return Object.assign({}, rect, {
+            day: day.day || 0,
+            dateKey: day.day ? dateKeyOf(this.data.year, this.data.month, day.day) : "",
+            disabled: !!day.disabled
+          });
+        });
+      })
+      .exec();
+  },
+
+  beginScheduleDrag(e) {
+    const touch = e.touches && e.touches[0];
+    const id = e.currentTarget.dataset.id;
+    const sourceDateKey = e.currentTarget.dataset.date || this.data.selectedDateKey;
+    const schedule = this.findScheduleForDrag(id);
+    if (!touch || !id || !schedule) return;
+    clearTimeout(this.dragTimer);
+    this.dragStart = { x: touch.clientX, y: touch.clientY };
+    this.dragCurrent = { x: touch.clientX, y: touch.clientY };
+    this.dragSchedule = schedule;
+    this.dragEvent = {
+      id,
+      sourceDateKey,
+      title: schedule.title || schedule.name || schedule.courseName || "未命名",
+      time: schedule.startTime || schedule.start || ""
+    };
+    this.dragTimer = setTimeout(() => {
+      this.cacheCalendarDropRects();
+      this.setData({
+        dragActive: true,
+        dragSourceId: id,
+        dragSourceDateKey: sourceDateKey,
+        dragTargetDateKey: "",
+        dragTargetDay: 0,
+        dragGhostTitle: this.dragEvent.title,
+        dragGhostTime: this.dragEvent.time,
+        dragGhostStyle: `transform: translate(${touch.clientX - 80}px, ${touch.clientY - 26}px) scale(1.04); opacity: 0.96;`,
+        swipedId: "",
+        popupEvents: withSwipeState(this.data.popupEvents, ""),
+        sheetSwipeLocked: true
+      });
+    }, 260);
+  },
+
+  moveScheduleDrag(e) {
+    const touch = e.touches && e.touches[0];
+    if (!touch) return;
+    this.dragCurrent = { x: touch.clientX, y: touch.clientY };
+    if (!this.data.dragActive) {
+      if (!this.dragStart) return;
+      const deltaX = touch.clientX - this.dragStart.x;
+      const deltaY = touch.clientY - this.dragStart.y;
+      if (Math.abs(deltaX) > 12 || Math.abs(deltaY) > 12) {
+        clearTimeout(this.dragTimer);
+      }
+      return;
+    }
+    const target = this.findDropDate(touch.clientX, touch.clientY);
+    const updates = {
+      dragGhostStyle: `transform: translate(${touch.clientX - 80}px, ${touch.clientY - 26}px) scale(1.04); opacity: 0.96;`
+    };
+    if ((target && target.dateKey) !== this.data.dragTargetDateKey) {
+      updates.dragTargetDateKey = target ? target.dateKey : "";
+      updates.dragTargetDay = target ? target.day : 0;
+    }
+    this.setData(updates);
+  },
+
+  endScheduleDrag(e) {
+    clearTimeout(this.dragTimer);
+    if (!this.data.dragActive) {
+      this.dragStart = null;
+      this.dragEvent = null;
+      this.dragSchedule = null;
+      this.setData({ sheetSwipeLocked: false });
+      return;
+    }
+    const touch = (e.changedTouches && e.changedTouches[0]) || this.dragCurrent;
+    const target = touch ? this.findDropDate(touch.clientX, touch.clientY) : null;
+    if (!target || !target.dateKey) {
+      this.resetScheduleDrag(() => {
+        wx.showToast({ title: "未选择有效日期", icon: "none" });
+      });
+      return;
+    }
+    this.moveScheduleToDate(this.dragSchedule, this.dragEvent, target.dateKey);
+  },
+
+  cancelScheduleDrag() {
+    clearTimeout(this.dragTimer);
+    this.resetScheduleDrag();
+  },
+
+  findDropDate(x, y) {
+    const rects = this.dragDayRects || [];
+    for (let index = 0; index < rects.length; index += 1) {
+      const rect = rects[index];
+      if (rect.disabled || !rect.dateKey) continue;
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        return rect;
+      }
+    }
+    return null;
+  },
+
+  resetScheduleDrag(callback) {
+    if (this.data.dragActive) this.preventScheduleTapUntil = Date.now() + 360;
+    this.dragStart = null;
+    this.dragCurrent = null;
+    this.dragEvent = null;
+    this.dragSchedule = null;
+    this.dragDayRects = [];
+    this.setData({
+      dragActive: false,
+      dragSourceId: "",
+      dragSourceDateKey: "",
+      dragTargetDateKey: "",
+      dragTargetDay: 0,
+      dragGhostTitle: "",
+      dragGhostTime: "",
+      dragGhostStyle: "transform: translate(0px, 0px); opacity: 0;",
+      sheetSwipeLocked: false
+    }, callback);
+  },
+
+  moveScheduleToDate(schedule, dragEvent, targetDateKey) {
+    const sourceDateKey = dragEvent && dragEvent.sourceDateKey;
+    const id = dragEvent && dragEvent.id;
+    if (!schedule || !id || !sourceDateKey || !targetDateKey) {
+      this.resetScheduleDrag(() => wx.showToast({ title: "移动失败", icon: "none" }));
+      return;
+    }
+    if (sourceDateKey === targetDateKey) {
+      this.resetScheduleDrag(() => wx.showToast({ title: "已在当前日期", icon: "none" }));
+      return;
+    }
+    const patch = buildDatePatch(targetDateKey);
+    if (!patch) {
+      this.resetScheduleDrag(() => wx.showToast({ title: "日期无效", icon: "none" }));
+      return;
+    }
+    if (isRepeatingSchedule(schedule)) {
+      this.moveRepeatingOccurrence(schedule, id, sourceDateKey, targetDateKey);
+      return;
+    }
+    const updated = updateItem(KEYS.schedules, id, Object.assign({}, patch, {
+      updatedAt: new Date().toISOString()
+    }));
+    if (!updated) {
+      this.resetScheduleDrag(() => wx.showToast({ title: "移动失败", icon: "none" }));
+      return;
+    }
+    api.schedule.update(Object.assign({ id: scheduleCloudId(schedule), clientId: schedule.clientId || schedule.id }, patch)).catch((error) => {
+      console.warn("schedule drag update pending local only", error.message);
+    });
+    this.finishScheduleDragMove(targetDateKey);
+  },
+
+  moveRepeatingOccurrence(schedule, id, sourceDateKey, targetDateKey) {
+    const excludedDates = Array.isArray(schedule.excludedDates) ? schedule.excludedDates.slice() : [];
+    if (!excludedDates.includes(sourceDateKey)) excludedDates.push(sourceDateKey);
+    const single = cloneSingleSchedule(schedule, targetDateKey, sourceDateKey);
+    updateItem(KEYS.schedules, id, { excludedDates, updatedAt: new Date().toISOString() });
+    appendItem(KEYS.schedules, single);
+    api.schedule.update({ id: scheduleCloudId(schedule), clientId: schedule.clientId || schedule.id, excludedDates }).catch((error) => {
+      console.warn("schedule drag repeat update pending local only", error.message);
+    });
+    api.schedule.create(single).catch((error) => {
+      console.warn("schedule drag single create pending local only", error.message);
+    });
+    // TODO: add an undo snapshot here by deleting the split item and removing sourceDateKey from excludedDates.
+    this.finishScheduleDragMove(targetDateKey);
+  },
+
+  finishScheduleDragMove(targetDateKey) {
+    const selected = parseDateKey(targetDateKey);
+    const shouldSelectTarget = selected && selected.year === this.data.year && selected.month === this.data.month;
+    const updates = shouldSelectTarget ? {
+      selectedDay: selected.day,
+      selectedDateKey: targetDateKey,
+      selectedNotes: notesForDate(targetDateKey)
+    } : {};
+    this.setData(updates, () => {
+      this.resetScheduleDrag(() => {
+        this.refreshCalendar({ skipCloud: true });
+        wx.showToast({ title: formatMoveToast(targetDateKey), icon: "success" });
+      });
+    });
+  },
+
   editSchedule(e) {
+    if (this.preventScheduleTapUntil && Date.now() < this.preventScheduleTapUntil) return;
     const id = e.currentTarget.dataset.id;
     const occurrenceDateKey = e.currentTarget.dataset.date || this.data.selectedDateKey;
     if (!id) return;

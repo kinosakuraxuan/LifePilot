@@ -125,10 +125,21 @@ function collectStats(dayCount) {
   const daySet = {};
   days.forEach((day) => { daySet[day.key] = true; });
 
-  readList(KEYS.records, []).forEach((record) => {
+  const records = readList(KEYS.records, []);
+  const manualDetailDates = {};
+  records.forEach((record) => {
+    const source = String(record.source || "").toLowerCase();
+    if (source === "pomodoro" || source === "manualaggregate") return;
+    const dateKey = toDateKey(record.dateKey || record.date || record.endedAt || record.createdAt);
+    if (!daySet[dateKey]) return;
+    if (normalizeModule(record.module || record.category || record.type)) manualDetailDates[dateKey] = true;
+  });
+
+  records.forEach((record) => {
     const dateKey = toDateKey(record.dateKey || record.date || record.endedAt || record.createdAt);
     if (!daySet[dateKey]) return;
     const source = String(record.source || "").toLowerCase() === "pomodoro" ? "pomodoro" : "manual";
+    if (String(record.source || "").toLowerCase() === "manualaggregate" && manualDetailDates[dateKey]) return;
     if (source === "pomodoro") {
       const moduleKey = normalizeModule(record.module || record.category || record.type);
       addMinutes(buckets, moduleKey, dateKey, valueToMinutes(record), "pomodoro", record);

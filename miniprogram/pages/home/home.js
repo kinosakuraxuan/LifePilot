@@ -65,7 +65,7 @@ function chromeLayout() {
     const buttonSize = 44;
     const topBarHeight = menu.bottom + 18;
     const actionTop = menu.top + (menu.height - buttonSize) / 2;
-    const actionRight = Math.max(18, windowInfo.windowWidth - menu.left - 148);
+    const actionRight = Math.max(18, windowInfo.windowWidth - menu.left + 8);
     return {
       topBarStyle: `min-height:${topBarHeight}px;padding-top:${menu.top}px;`,
       topActionsStyle: `right:${actionRight}px;top:${actionTop}px;`,
