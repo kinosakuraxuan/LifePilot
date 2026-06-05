@@ -179,6 +179,16 @@ function monthMeta(year, month) {
 function itemToEvent(item, occurrenceDateKey) {
   const normalized = normalizeScheduleItem(item, item.type || "schedule");
   const id = item.clientId || item.id || item._id || item.cloudId || normalized.id || normalized.searchIndexId;
+  const location = String(
+    normalized.location
+    || item.location
+    || item.classroom
+    || item.locationName
+    || item.locationDetail
+    || item.address
+    || item.place
+    || ""
+  ).trim();
   return {
     id,
     storageId: id,
@@ -189,7 +199,7 @@ function itemToEvent(item, occurrenceDateKey) {
     displayStartDateKey: occurrenceDateKey,
     originalStartDateKey: item.startDateKey || item.dateKey || item.date || "",
     title: normalized.title,
-    location: normalized.location || normalized.note || "",
+    location,
     start: normalized.startTime || "",
     end: normalized.endTime || "",
     reminder: normalized.reminder || normalized.remindAt || ""

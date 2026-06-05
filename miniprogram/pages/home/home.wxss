@@ -346,8 +346,11 @@
 .agenda-main {
   flex: 1;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
   min-height: 82rpx;
+  min-width: 0;
 }
 
 .agenda-title {
@@ -362,7 +365,16 @@
 }
 
 .agenda-location {
-  display: none;
+  display: block;
+  max-width: 420rpx;
+  min-height: 30rpx;
+  margin-top: 6rpx;
+  overflow: hidden;
+  color: #8b95a5;
+  font-size: 24rpx;
+  line-height: 30rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agenda-time {

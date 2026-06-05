@@ -187,6 +187,15 @@ function compactTitle(title) {
   return value.length > 4 ? `${value.slice(0, 4)}...` : value;
 }
 
+function eventLocationText(item, normalized) {
+  return String(
+    (normalized && normalized.location)
+    || (item && (item.location || item.classroom || item.locationName || item.locationDetail || item.address || item.place))
+    || (normalized && normalized.note)
+    || ""
+  ).trim();
+}
+
 function displayNoteDate(date) {
   const parts = String(date || "").split("-");
   if (parts.length !== 3) return "";
@@ -197,6 +206,7 @@ function itemToEvent(item, occurrenceDateKey) {
   const normalized = normalizeScheduleItem(item, item.type || "schedule");
   const title = normalized.title || "未命名";
   const id = item.clientId || item.id || item._id || item.cloudId || normalized.id || normalized.searchIndexId;
+  const location = eventLocationText(item, normalized);
   return {
     id,
     storageId: id,
@@ -208,7 +218,8 @@ function itemToEvent(item, occurrenceDateKey) {
     originalStartDateKey: item.startDateKey || item.dateKey || item.date || "",
     title,
     displayTitle: compactTitle(title),
-    location: normalized.location || normalized.note || "",
+    location,
+    displayLocation: location,
     start: normalized.startTime || "",
     end: normalized.endTime || "",
     open: false
@@ -325,6 +336,13 @@ Page({
     dragEdgeMode: "",
     dragEdgeLabel: "",
     dragEdgeProgressStyle: "transform: scaleX(0);",
+    dragViewYear: 0,
+    dragViewMonth: 0,
+    dragViewMonthTitle: "",
+    dragViewDays: [],
+    dragViewScrollLeft: 0,
+    dragViewTargetDateKey: "",
+    dragViewTargetDay: 0,
     agendaTouchStartX: 0,
     agendaTouchStartY: 0,
     sheetVisible: false,
@@ -360,9 +378,10 @@ Page({
     if (typeof this.getTabBar === "function" && this.getTabBar()) {
       this.getTabBar().setData({ selected: 1 });
     }
-    this.refreshCalendar({ skipCloud: true });
+    this.refreshCalendar({ skipCloud: true }, () => {
+      this.afterCalendarRender(() => this.measureCalendarScroll());
+    });
     this.loadCloudSchedules(this.data.year, this.data.month, this.data.selectedDay);
-    this.measureCalendarScroll();
     showDueLocalReminder();
   },
 
@@ -374,7 +393,11 @@ Page({
     this.stopDragEdge();
   },
 
-  refreshCalendar(options) {
+  refreshCalendar(options, callback) {
+    if (typeof options === "function") {
+      callback = options;
+      options = {};
+    }
     const skipCloud = !!(options && options.skipCloud);
     const currentToday = getToday();
     const year = this.data.year;
@@ -385,16 +408,22 @@ Page({
       days: buildMonth(year, month, selectedDay, currentToday, this.data.swipedId),
       popupEvents: withSwipeState(eventsFor(year, month, selectedDay), this.data.swipedId),
       selectedNotes: notesForDate(this.data.selectedDateKey || dateKeyOf(year, month, selectedDay))
+    }, () => {
+      if (!skipCloud) this.loadCloudSchedules(year, month, selectedDay);
+      if (callback) callback();
     });
-    if (!skipCloud) this.loadCloudSchedules(year, month, selectedDay);
   },
 
   loadCloudSchedules(year, month, selectedDay) {
     const dateKey = dateKeyOf(year, month, selectedDay);
+    const requestToken = `${year}-${month}-${selectedDay}-${Date.now()}-${Math.random()}`;
+    this.calendarCloudLoadToken = requestToken;
     Promise.all([
       api.schedule.listByDate(dateKey),
       api.schedule.listByMonth(year, month)
     ]).then((results) => {
+      if (this.calendarCloudLoadToken !== requestToken) return;
+      if (this.data.year !== year || this.data.month !== month) return;
       const dateRes = results[0];
       const monthRes = results[1];
       const dayItems = {};
@@ -402,6 +431,7 @@ Page({
       if (cloudSchedules.length) {
         mergeSchedulesToStorage(cloudSchedules);
       }
+      if (this.data.dragActive) return;
       ((monthRes.data && monthRes.data.days) || []).forEach((day) => {
         const dayNumber = Number(String(day.date).slice(8, 10));
         const items = withSwipeState((day.items || []).map((item) => itemToEvent(item, day.date)), this.data.swipedId);
@@ -423,7 +453,21 @@ Page({
         updates.popupEvents = withSwipeState(dateItems, this.data.swipedId);
       }
       this.setData(updates, () => {
-        if (cloudSchedules.length) this.refreshCalendar({ skipCloud: true });
+        if (this.calendarCloudLoadToken !== requestToken) return;
+        if (this.data.year !== year || this.data.month !== month) return;
+        if (cloudSchedules.length) {
+          this.refreshCalendar({ skipCloud: true }, () => {
+            if (!this.data.dragActive) return;
+            this.afterCalendarRender(() => {
+              this.cacheDragViewDropRects();
+              const touch = this.dragCurrent;
+              if (touch) {
+                this.updateDragGhostPosition(touch.x, touch.y, null, true);
+                this.updateDragViewTargetFromPoint(touch.x, touch.y);
+              }
+            });
+          });
+        }
       });
     }).catch((error) => {
       console.warn("calendar cloud load fallback to local", error.message);
@@ -471,8 +515,9 @@ Page({
     const selectedDay = year === today.year && month === today.month ? today.day : 1;
     this.calendarScrollLeft = 0;
     this.setData({ year, month, selectedDay, monthTitle: formatMonth(year, month), swipedId: "", calendarScrollLeft: 0 }, () => {
-      this.refreshCalendar();
-      this.measureCalendarScroll();
+      this.refreshCalendar(null, () => {
+        this.afterCalendarRender(() => this.measureCalendarScroll());
+      });
     });
   },
 
@@ -550,10 +595,39 @@ Page({
 
   onAgendaTouchStart(e) {
     const touch = e.touches[0];
+    const id = e.currentTarget.dataset.id;
+    const date = e.currentTarget.dataset.date || this.data.selectedDateKey;
+    clearTimeout(this.agendaLongPressTimer);
+    this.agendaLongPressFired = false;
+    this.agendaLongPressMoved = false;
     this.setData({ agendaTouchStartX: touch.clientX, agendaTouchStartY: touch.clientY, sheetSwipeLocked: true });
+    this.agendaLongPressTimer = setTimeout(() => {
+      if (this.agendaLongPressMoved || this.data.dragActive || !id) return;
+      this.agendaLongPressFired = true;
+      clearTimeout(this.dragTimer);
+      this.openScheduleEditorByData(id, date);
+      this.preventScheduleTapUntil = Date.now() + 360;
+    }, 420);
+  },
+
+  onAgendaTouchMove(e) {
+    const touch = e.touches && e.touches[0];
+    if (!touch) return;
+    const deltaX = touch.clientX - this.data.agendaTouchStartX;
+    const deltaY = touch.clientY - this.data.agendaTouchStartY;
+    if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+      this.agendaLongPressMoved = true;
+      clearTimeout(this.agendaLongPressTimer);
+    }
   },
 
   onAgendaTouchEnd(e) {
+    clearTimeout(this.agendaLongPressTimer);
+    if (this.agendaLongPressFired) {
+      this.agendaLongPressFired = false;
+      this.setData({ sheetSwipeLocked: false });
+      return;
+    }
     const id = e.currentTarget.dataset.id;
     const touch = e.changedTouches[0];
     const deltaX = touch.clientX - this.data.agendaTouchStartX;
@@ -571,6 +645,13 @@ Page({
     }
   },
 
+  onAgendaTouchCancel() {
+    clearTimeout(this.agendaLongPressTimer);
+    this.agendaLongPressFired = false;
+    this.agendaLongPressMoved = false;
+    this.setData({ sheetSwipeLocked: false });
+  },
+
   onCalendarScroll(e) {
     const scrollLeft = Number(e.detail && e.detail.scrollLeft) || 0;
     this.calendarScrollLeft = scrollLeft;
@@ -578,6 +659,17 @@ Page({
       this.lastCalendarScrollSync = Date.now();
       this.setData({ calendarScrollLeft: scrollLeft });
     }
+  },
+
+  afterCalendarRender(callback) {
+    const run = () => {
+      if (callback) callback();
+    };
+    if (wx.nextTick) {
+      wx.nextTick(() => setTimeout(run, 20));
+      return;
+    }
+    setTimeout(run, 40);
   },
 
   measureCalendarScroll(callback) {
@@ -593,6 +685,23 @@ Page({
         this.calendarViewportRect = viewport || null;
         this.calendarInnerWidth = inner && inner.width ? inner.width : 0;
         this.calendarMaxScrollLeft = viewport && inner ? Math.max(0, inner.width - viewport.width) : 0;
+        if (callback) callback();
+      });
+  },
+
+  measureDragViewScroll(callback) {
+    wx.createSelectorQuery()
+      .in(this)
+      .select(".drag-calendar-scroll")
+      .boundingClientRect()
+      .select(".drag-calendar-inner")
+      .boundingClientRect()
+      .exec((res) => {
+        const viewport = res && res[0];
+        const inner = res && res[1];
+        this.dragViewViewportRect = viewport || null;
+        this.dragViewInnerWidth = inner && inner.width ? inner.width : 0;
+        this.dragViewMaxScrollLeft = viewport && inner ? Math.max(0, inner.width - viewport.width) : 0;
         if (callback) callback();
       });
   },
@@ -632,6 +741,23 @@ Page({
       .exec();
   },
 
+  cacheDragViewDropRects() {
+    wx.createSelectorQuery()
+      .in(this)
+      .selectAll(".drag-calendar-layer .wide-day")
+      .boundingClientRect((rects) => {
+        this.dragViewDayRects = (rects || []).map((rect, index) => {
+          const day = this.data.dragViewDays[index] || {};
+          return Object.assign({}, rect, {
+            day: day.day || 0,
+            dateKey: day.day ? dateKeyOf(this.data.dragViewYear, this.data.dragViewMonth, day.day) : "",
+            disabled: !!day.disabled
+          });
+        });
+      })
+      .exec();
+  },
+
   beginScheduleDrag(e) {
     const touch = e.touches && e.touches[0];
     const id = e.currentTarget.dataset.id;
@@ -649,19 +775,31 @@ Page({
       time: schedule.startTime || schedule.start || ""
     };
     this.dragTimer = setTimeout(() => {
-      this.measureCalendarScroll(() => this.cacheCalendarDropRects());
+      const currentToday = getToday();
+      const dragViewDays = buildMonth(this.data.year, this.data.month, this.data.selectedDay, currentToday, "");
+      this.dragViewScrollLeft = this.data.calendarScrollLeft || 0;
       this.updateDragGhostPosition(touch.clientX, touch.clientY, {
         dragActive: true,
         dragSourceId: id,
         dragSourceDateKey: sourceDateKey,
         dragTargetDateKey: "",
         dragTargetDay: 0,
+        dragViewYear: this.data.year,
+        dragViewMonth: this.data.month,
+        dragViewMonthTitle: formatMonth(this.data.year, this.data.month),
+        dragViewDays,
+        dragViewScrollLeft: this.data.calendarScrollLeft || 0,
+        dragViewTargetDateKey: "",
+        dragViewTargetDay: 0,
         dragGhostTitle: this.dragEvent.title,
         dragGhostTime: this.dragEvent.time,
         dragHintText: "拖到日期格后松手",
         swipedId: "",
         popupEvents: withSwipeState(this.data.popupEvents, ""),
         sheetSwipeLocked: true
+      }, true);
+      this.afterCalendarRender(() => {
+        this.measureDragViewScroll(() => this.cacheDragViewDropRects());
       });
     }, 260);
   },
@@ -723,14 +861,8 @@ Page({
       }
       return;
     }
-    const target = this.findDropDate(touch.clientX, touch.clientY);
-    const updates = {};
-    if ((target && target.dateKey) !== this.data.dragTargetDateKey) {
-      updates.dragTargetDateKey = target ? target.dateKey : "";
-      updates.dragTargetDay = target ? target.day : 0;
-      updates.dragHintText = target ? "松手移动到该日期" : "拖到日期格后松手";
-    }
-    this.updateDragGhostPosition(touch.clientX, touch.clientY, updates);
+    this.updateDragGhostPosition(touch.clientX, touch.clientY);
+    this.updateDragViewTargetFromPoint(touch.clientX, touch.clientY);
     this.updateDragEdge(touch.clientX);
   },
 
@@ -748,14 +880,15 @@ Page({
     const touch = (e.changedTouches && e.changedTouches[0]) || this.dragCurrent;
     const touchX = touch && (typeof touch.clientX === "number" ? touch.clientX : touch.x);
     const touchY = touch && (typeof touch.clientY === "number" ? touch.clientY : touch.y);
-    const target = touch ? this.findDropDate(touchX, touchY) : null;
-    if (!target || !target.dateKey) {
+    const finalTarget = touch ? this.findDragViewDropDate(touchX, touchY) : null;
+    const targetDateKey = (finalTarget && finalTarget.dateKey) || this.data.dragViewTargetDateKey || this.data.dragTargetDateKey;
+    if (!targetDateKey) {
       this.resetScheduleDrag(() => {
         wx.showToast({ title: "未选择有效日期", icon: "none" });
       });
       return;
     }
-    this.moveScheduleToDate(this.dragSchedule, this.dragEvent, target.dateKey);
+    this.moveScheduleToDate(this.dragSchedule, this.dragEvent, targetDateKey);
   },
 
   cancelScheduleDrag() {
@@ -805,6 +938,48 @@ Page({
     return null;
   },
 
+  findDragViewDropDate(x, y) {
+    const rects = this.dragViewDayRects || [];
+    for (let index = 0; index < rects.length; index += 1) {
+      const rect = rects[index];
+      if (rect.disabled || !rect.dateKey) continue;
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        return rect;
+      }
+    }
+    return null;
+  },
+
+  updateDragTargetFromPoint(x, y) {
+    const target = this.findDropDate(x, y);
+    const nextDateKey = target ? target.dateKey : "";
+    if (nextDateKey === this.data.dragTargetDateKey && (!target || target.day === this.data.dragTargetDay)) {
+      return target;
+    }
+    this.setData({
+      dragTargetDateKey: nextDateKey,
+      dragTargetDay: target ? target.day : 0,
+      dragHintText: target ? "松手移动到该日期" : "拖到日期格后松手"
+    });
+    return target;
+  },
+
+  updateDragViewTargetFromPoint(x, y) {
+    const target = this.findDragViewDropDate(x, y);
+    const nextDateKey = target ? target.dateKey : "";
+    if (nextDateKey === this.data.dragViewTargetDateKey && (!target || target.day === this.data.dragViewTargetDay)) {
+      return target;
+    }
+    this.setData({
+      dragViewTargetDateKey: nextDateKey,
+      dragViewTargetDay: target ? target.day : 0,
+      dragTargetDateKey: nextDateKey,
+      dragTargetDay: target ? target.day : 0,
+      dragHintText: target ? "松手移动到该日期" : "拖到日期格后松手"
+    });
+    return target;
+  },
+
   updateDragEdge(x) {
     const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : { windowWidth: 375 };
     const width = windowInfo.windowWidth || 375;
@@ -814,12 +989,12 @@ Page({
     if (!direction) {
       this.stopDragEdge();
       this.setData({
-        dragHintText: this.data.dragTargetDateKey ? "松手移动到该日期" : "拖到日期格后松手"
+        dragHintText: this.data.dragViewTargetDateKey ? "松手移动到该日期" : "拖到日期格后松手"
       });
       return;
     }
-    const maxScrollLeft = this.calendarMaxScrollLeft || 0;
-    const currentLeft = this.calendarScrollLeft || this.data.calendarScrollLeft || 0;
+    const maxScrollLeft = this.dragViewMaxScrollLeft || 0;
+    const currentLeft = this.dragViewScrollLeft || this.data.dragViewScrollLeft || 0;
     const canScrollMonth = direction > 0 ? currentLeft < maxScrollLeft - 2 : currentLeft > 2;
     if (canScrollMonth) {
       this.stopDragMonthHold();
@@ -843,23 +1018,19 @@ Page({
     this.stopDragEdgeScroll();
     this.dragEdgeScrollDirection = direction;
     this.dragEdgeScrollTimer = setInterval(() => {
-      const maxScrollLeft = this.calendarMaxScrollLeft || 0;
-      const currentLeft = this.calendarScrollLeft || this.data.calendarScrollLeft || 0;
+      const maxScrollLeft = this.dragViewMaxScrollLeft || 0;
+      const currentLeft = this.dragViewScrollLeft || this.data.dragViewScrollLeft || 0;
       const nextLeft = Math.max(0, Math.min(maxScrollLeft, currentLeft + direction * DRAG_EDGE_SCROLL_STEP));
-      this.calendarScrollLeft = nextLeft;
-      this.setData({ calendarScrollLeft: nextLeft }, () => {
-        this.cacheCalendarDropRects();
-        const touch = this.dragCurrent;
-        if (touch) {
-          this.updateDragGhostPosition(touch.x, touch.y);
-          const target = this.findDropDate(touch.x, touch.y);
-          if ((target && target.dateKey) !== this.data.dragTargetDateKey) {
-            this.setData({
-              dragTargetDateKey: target ? target.dateKey : "",
-              dragTargetDay: target ? target.day : 0
-            });
+      this.dragViewScrollLeft = nextLeft;
+      this.setData({ dragViewScrollLeft: nextLeft }, () => {
+        this.afterCalendarRender(() => {
+          this.cacheDragViewDropRects();
+          const touch = this.dragCurrent;
+          if (touch) {
+            this.updateDragGhostPosition(touch.x, touch.y);
+            this.updateDragViewTargetFromPoint(touch.x, touch.y);
           }
-        }
+        });
       });
       if (nextLeft <= 0 || nextLeft >= maxScrollLeft) {
         this.stopDragEdgeScroll();
@@ -878,7 +1049,7 @@ Page({
       dragEdgeVisible: true,
       dragEdgeSide: direction > 0 ? "right" : "left",
       dragEdgeMode: "month",
-      dragEdgeLabel: direction > 0 ? `前往 ${adjacentMonthLabel(this.data.year, this.data.month, 1)}` : `返回 ${adjacentMonthLabel(this.data.year, this.data.month, -1)}`,
+      dragEdgeLabel: direction > 0 ? `前往 ${adjacentMonthLabel(this.data.dragViewYear || this.data.year, this.data.dragViewMonth || this.data.month, 1)}` : `返回 ${adjacentMonthLabel(this.data.dragViewYear || this.data.year, this.data.dragViewMonth || this.data.month, -1)}`,
       dragEdgeProgressStyle: "transform: scaleX(0);",
       dragHintText: "继续停留可切换月份"
     });
@@ -888,7 +1059,7 @@ Page({
       if (progress >= 1) {
         const nextDirection = this.dragMonthHoldDirection;
         this.stopDragMonthHold();
-        this.switchDragMonth(nextDirection);
+        this.switchDragPreviewMonth(nextDirection);
       }
     }, 48);
   },
@@ -924,50 +1095,55 @@ Page({
     this.dragMonthHoldStartedAt = 0;
   },
 
-  switchDragMonth(direction) {
+  switchDragPreviewMonth(direction) {
     if (!direction || this.dragMonthSwitching) return;
     this.dragMonthSwitching = true;
     const latestDragCurrent = this.dragCurrent ? Object.assign({}, this.dragCurrent) : null;
-    const next = adjacentMonth(this.data.year, this.data.month, direction);
+    const baseYear = this.data.dragViewYear || this.data.year;
+    const baseMonth = this.data.dragViewMonth || this.data.month;
+    const next = adjacentMonth(baseYear, baseMonth, direction);
     const currentToday = getToday();
     const selectedDay = next.year === currentToday.year && next.month === currentToday.month ? currentToday.day : 1;
-    const scrollLeft = direction > 0 ? 0 : (this.calendarMaxScrollLeft || this.data.calendarScrollLeft || 0);
+    const dragViewDays = buildMonth(next.year, next.month, selectedDay, currentToday, "");
+    this.dragViewScrollLeft = 0;
     this.setData({
-      year: next.year,
-      month: next.month,
-      selectedDay,
-      selectedDateKey: dateKeyOf(next.year, next.month, selectedDay),
-      monthTitle: formatMonth(next.year, next.month),
-      swipedId: "",
-      calendarScrollLeft: scrollLeft,
+      dragViewYear: next.year,
+      dragViewMonth: next.month,
+      dragViewMonthTitle: formatMonth(next.year, next.month),
+      dragViewDays,
+      dragViewScrollLeft: 0,
+      dragViewTargetDateKey: "",
+      dragViewTargetDay: 0,
       dragTargetDateKey: "",
       dragTargetDay: 0,
       dragEdgeVisible: false,
       dragEdgeProgressStyle: "transform: scaleX(0);",
       dragHintText: "拖到日期格后松手"
     }, () => {
-      this.refreshCalendar({ skipCloud: true });
-      this.loadCloudSchedules(next.year, next.month, selectedDay);
-      setTimeout(() => {
-        this.measureCalendarScroll(() => {
-          const finishMonthSwitch = () => {
-            this.cacheCalendarDropRects();
-            const touch = latestDragCurrent || this.dragCurrent;
-            if (touch) {
-              this.updateDragGhostPosition(touch.x, touch.y, null, true);
-            }
-            this.dragMonthSwitching = false;
-            if (touch) this.updateDragEdge(touch.x);
-          };
-          if (direction < 0) {
-            this.calendarScrollLeft = this.calendarMaxScrollLeft || 0;
-            this.setData({ calendarScrollLeft: this.calendarScrollLeft }, finishMonthSwitch);
-          } else {
-            this.calendarScrollLeft = 0;
-            finishMonthSwitch();
-          }
+      const finishMonthSwitch = () => {
+        this.cacheDragViewDropRects();
+        const touch = latestDragCurrent || this.dragCurrent;
+        if (touch) {
+          this.updateDragGhostPosition(touch.x, touch.y, null, true);
+          this.updateDragViewTargetFromPoint(touch.x, touch.y);
+        }
+        this.dragMonthSwitching = false;
+        if (touch) this.updateDragEdge(touch.x);
+      };
+      const syncScrollAndRects = () => {
+        this.afterCalendarRender(() => {
+          this.measureDragViewScroll(() => {
+            const targetLeft = direction < 0 ? (this.dragViewMaxScrollLeft || 0) : 0;
+            this.dragViewScrollLeft = targetLeft;
+            this.setData({ dragViewScrollLeft: targetLeft }, () => {
+              this.afterCalendarRender(() => {
+                this.measureDragViewScroll(finishMonthSwitch);
+              });
+            });
+          });
         });
-      }, 80);
+      };
+      syncScrollAndRects();
     });
   },
 
@@ -979,12 +1155,22 @@ Page({
     this.dragEvent = null;
     this.dragSchedule = null;
     this.dragDayRects = [];
+    this.dragViewDayRects = [];
+    this.dragViewScrollLeft = 0;
+    this.dragViewMaxScrollLeft = 0;
     this.setData({
       dragActive: false,
       dragSourceId: "",
       dragSourceDateKey: "",
       dragTargetDateKey: "",
       dragTargetDay: 0,
+      dragViewYear: 0,
+      dragViewMonth: 0,
+      dragViewMonthTitle: "",
+      dragViewDays: [],
+      dragViewScrollLeft: 0,
+      dragViewTargetDateKey: "",
+      dragViewTargetDay: 0,
       dragGhostTitle: "",
       dragGhostTime: "",
       dragGhostStyle: "transform: translate(0px, 0px); opacity: 0;",
@@ -1049,30 +1235,60 @@ Page({
 
   finishScheduleDragMove(targetDateKey) {
     const selected = parseDateKey(targetDateKey);
-    const shouldSelectTarget = selected && selected.year === this.data.year && selected.month === this.data.month;
-    const updates = shouldSelectTarget ? {
-      selectedDay: selected.day,
-      selectedDateKey: targetDateKey,
-      selectedNotes: notesForDate(targetDateKey)
-    } : {};
-    this.setData(updates, () => {
+    if (!selected) {
       this.resetScheduleDrag(() => {
-        this.refreshCalendar({ skipCloud: true });
+        wx.showToast({ title: formatMoveToast(targetDateKey), icon: "success" });
+      });
+      return;
+    }
+    this.resetScheduleDrag(() => {
+      this.calendarScrollLeft = 0;
+      this.setData({
+        year: selected.year,
+        month: selected.month,
+        selectedDay: selected.day,
+        selectedDateKey: targetDateKey,
+        selectedNotes: notesForDate(targetDateKey),
+        monthTitle: formatMonth(selected.year, selected.month),
+        calendarScrollLeft: 0,
+        swipedId: "",
+        popupEvents: []
+      }, () => {
+        this.refreshCalendar({ skipCloud: true }, () => {
+          this.afterCalendarRender(() => this.measureCalendarScroll());
+        });
+        this.loadCloudSchedules(selected.year, selected.month, selected.day);
         wx.showToast({ title: formatMoveToast(targetDateKey), icon: "success" });
       });
     });
   },
 
-  editSchedule(e) {
-    if (this.preventScheduleTapUntil && Date.now() < this.preventScheduleTapUntil) return;
-    const id = e.currentTarget.dataset.id;
-    const occurrenceDateKey = e.currentTarget.dataset.date || this.data.selectedDateKey;
+  openScheduleEditorByData(id, occurrenceDateKey) {
+    occurrenceDateKey = occurrenceDateKey || this.data.selectedDateKey;
     if (!id) return;
     this.setData({
       swipedId: "",
       popupEvents: withSwipeState(this.data.popupEvents, "")
-    }, () => this.refreshCalendar());
+    }, () => this.refreshCalendar({ skipCloud: true }));
     wx.navigateTo({ url: `/pages/scheduleAdd/scheduleAdd?id=${id}&mode=edit&dateKey=${occurrenceDateKey}` });
+  },
+
+  openScheduleEditor(e) {
+    const id = e.currentTarget.dataset.id;
+    const occurrenceDateKey = e.currentTarget.dataset.date || this.data.selectedDateKey;
+    this.openScheduleEditorByData(id, occurrenceDateKey);
+  },
+
+  editSchedule(e) {
+    if (this.preventScheduleTapUntil && Date.now() < this.preventScheduleTapUntil) return;
+    this.openScheduleEditor(e);
+  },
+
+  longPressEditSchedule(e) {
+    if (this.data.dragActive) return;
+    clearTimeout(this.dragTimer);
+    this.openScheduleEditor(e);
+    this.preventScheduleTapUntil = Date.now() + 360;
   },
 
   deleteSchedule(e) {

@@ -67,12 +67,12 @@
     <view class="sheet-body" bindtouchstart="onSheetSwipeStart" bindtouchend="onSheetSwipeEnd">
       <scroll-view wx:if="{{sheetTab === 'schedule'}}" class="sheet-scroll" type="list" scroll-y="true">
         <block wx:if="{{popupEvents.length}}">
-          <view class="sheet-swipe-row {{dragActive && dragSourceId === item.id && dragSourceDateKey === item.occurrenceDateKey ? 'is-dragging-source' : ''}}" wx:for="{{popupEvents}}" wx:key="id" data-id="{{item.id}}" data-date="{{item.occurrenceDateKey}}" catchtap="editSchedule" catchtouchstart="beginScheduleDrag" catchtouchmove="trackSchedulePressMove" catchtouchend="cancelSchedulePress" catchtouchcancel="cancelScheduleTouch">
+          <view class="sheet-swipe-row" wx:for="{{popupEvents}}" wx:key="id" data-id="{{item.id}}" data-date="{{item.occurrenceDateKey}}" catchtap="editSchedule" catchtouchstart="onAgendaTouchStart" catchtouchmove="onAgendaTouchMove" catchtouchend="onAgendaTouchEnd" catchtouchcancel="onAgendaTouchCancel">
             <view class="sheet-event-card">
               <view class="event-marker"></view>
               <view class="sheet-event-main">
                 <text class="sheet-event-title" overflow="ellipsis" max-lines="1">{{item.title}}</text>
-                <text class="sheet-event-location">{{item.location || '无地点'}}</text>
+                <text class="sheet-event-location" overflow="ellipsis" max-lines="1">{{item.displayLocation || item.location || ''}}</text>
               </view>
               <view class="sheet-event-time">
                 <text>{{item.start || '全天'}}</text>
@@ -100,6 +100,38 @@
         </view>
       </scroll-view>
     </view>
+  </view>
+  <view wx:if="{{dragActive}}" class="drag-calendar-layer">
+    <view class="drag-calendar-header">
+      <text>{{dragViewMonthTitle}}</text>
+    </view>
+    <scroll-view class="calendar-x-scroll drag-calendar-scroll" type="list" scroll-x="true" enable-flex="true" scroll-left="{{dragViewScrollLeft}}">
+      <view class="calendar-wide-inner drag-calendar-inner">
+        <view class="wide-weekdays drag-weekdays">
+          <view wx:for="{{weekdays}}" wx:key="*this"><text>{{item}}</text></view>
+        </view>
+        <view class="wide-month">
+          <view class="wide-day {{item.disabled ? 'wide-empty' : ''}} {{item.isToday ? 'wide-today' : ''}} {{!item.disabled ? 'drop-ready' : ''}} {{dragViewTargetDay === item.day && item.day ? 'drop-hover' : ''}}" wx:for="{{dragViewDays}}" wx:key="id" data-day="{{item.day}}">
+            <view class="wide-date">
+              <text class="wide-number" wx:if="{{!item.disabled}}">{{item.day}}</text>
+              <text class="wide-lunar">{{item.lunar}}</text>
+            </view>
+            <view class="wide-events">
+              <block wx:for="{{item.events}}" wx:for-item="event" wx:for-index="eventIndex" wx:key="id">
+                <view class="wide-swipe-row {{dragSourceId === event.id && dragSourceDateKey === event.occurrenceDateKey ? 'is-dragging-source' : ''}}" wx:if="{{eventIndex < 2}}">
+                  <view class="wide-event">
+                    <view class="event-marker"></view>
+                    <text class="event-title" overflow="ellipsis" max-lines="1">{{event.displayTitle}}</text>
+                    <text class="event-time">{{event.start}}</text>
+                  </view>
+                </view>
+              </block>
+              <text class="more-event" wx:if="{{item.events.length > 2}}">+ 更多 {{item.events.length - 2}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
   </view>
   <view wx:if="{{dragActive}}" class="schedule-drag-layer" catchtouchmove="onGlobalDragMove" catchtouchend="onGlobalDragEnd" catchtouchcancel="onGlobalDragCancel">
     <view class="schedule-drag-ghost" style="{{dragGhostStyle}}">

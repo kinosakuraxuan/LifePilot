@@ -145,6 +145,37 @@
   font-size: 22rpx;
 }
 
+.drag-calendar-layer {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  z-index: 1370;
+  box-sizing: border-box;
+  padding-top: 52rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 32rpx rgba(15, 23, 42, 0.08);
+}
+
+.drag-calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 82rpx;
+  color: #111827;
+  font-size: 38rpx;
+  font-weight: 800;
+  line-height: 46rpx;
+}
+
+.drag-calendar-scroll {
+  background: #ffffff;
+}
+
+.drag-weekdays {
+  background: #ffffff;
+}
+
 .wide-number {
   color: #111827;
   font-size: 30rpx;
